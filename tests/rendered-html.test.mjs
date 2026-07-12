@@ -11,13 +11,13 @@ async function render() {
   }, { waitUntil() {}, passThroughOnException() {} });
 }
 
-test("renders the Folio Markdown converter", async () => {
+test("renders the unmarkdown.in Markdown converter", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
-  assert.match(html, /<title>Folio — Professional documents from Markdown<\/title>/i);
-  assert.match(html, /Your Markdown/);
+  assert.match(html, /<title>unmarkdown\.in — Professional documents from Markdown<\/title>/i);
+  assert.match(html, /AI writes Markdown/);
   assert.match(html, /Upload a \.md file/);
   assert.match(html, /DOCUMENT PREVIEW/);
   assert.match(html, /SRS Standard/);

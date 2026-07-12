@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { marked, Tokens } from "marked";
 import DOMPurify from "dompurify";
 
 const starter = `# Software Requirements Specification
 
-**Project:** Folio Document Studio  
+**Project:** unmarkdown.in Document Studio
 **Version:** 1.0  
 **Status:** Draft
 
@@ -74,9 +74,59 @@ const cssPresets = {
 } as const;
 
 type ThemeKey = keyof typeof themes;
+
+const promptCore = `Do NOT generate a DOCX or PDF file — that wastes your tokens on invisible formatting instead of quality content. Reply with the complete document as clean, well-structured Markdown (.md) only — no preamble and no code fence around the document. `;
+const promptEnd = ` I'll convert it into a professional Word/PDF myself.`;
+const promptShapes: Record<ThemeKey, string> = {
+  legal: "Format it as a formal legal document: # document title, ## numbered clauses (1. Definitions, 2. Scope of Agreement…), ### numbered sub-clauses, **bold** defined terms, and a closing acceptance section.",
+  srs: "Structure it as an IEEE-style SRS: # title, ## numbered sections (1. Introduction, 2. System Overview, 3. Functional Requirements…), functional requirements in a table (ID | Requirement | Priority) with FR-001 style IDs, non-functional requirements as **bold** bullets, and numbered acceptance criteria.",
+  architecture: "Structure it as a system design document: # title, ## numbered sections (1. Overview, 2. Goals & Constraints, 3. Components, 4. Data Flow, 5. Key Decisions), a decision table (Decision | Rationale | Trade-offs), and fenced code blocks for interfaces or configuration.",
+  executive: "Structure it as a board-ready report: # title, ## Executive Summary (three sentences max), ## Key Metrics as a table, ## Highlights and ## Risks as bullets, ## Recommendations as a numbered list, ## Next Steps.",
+  editorial: "Write it as polished long-form editorial: a compelling # headline, a strong opening paragraph, descriptive ## section headings, > blockquotes for pull-quotes, and a memorable closing line.",
+  academic: "Structure it as an academic paper: # title, ## Abstract, ## 1. Introduction, ## 2. Methodology, ## 3. Results with data tables, ## 4. Discussion, ## 5. Conclusion, and ## References as a numbered list.",
+  minimal: "Structure it as developer documentation: # project name, ## Quick start, ## Usage with fenced code blocks, ## API reference as a table (Parameter | Type | Description), and ## Notes.",
+};
+const promptSamples: Record<ThemeKey, string> = {
+  legal: `# Privacy Policy\n\n## 1. Definitions\n**"Service"** refers to the platform provided by…`,
+  srs: `# Software Requirements Specification\n\n## 1. Introduction\n| ID | Requirement | Priority |\n| FR-001 | The system shall… | Must |`,
+  architecture: `# System Architecture\n\n## 1. Overview\nThe platform is composed of three services…`,
+  executive: `# Q3 Business Review\n\n## Executive Summary\nRevenue grew 23% quarter-on-quarter…`,
+  editorial: `# The Art of Attention\n\nIn a world of infinite scroll, focus has become…`,
+  academic: `# Research Paper\n\n## Abstract\nThis study examines the relationship between…`,
+  minimal: `# API Reference\n\n## Quick start\n\`\`\`bash\nnpm install @acme/sdk\n\`\`\``,
+};
 type CssPresetKey = keyof typeof cssPresets;
 type PageSize = "a4" | "letter";
 type MarginSize = "narrow" | "normal" | "wide";
+
+function playBulbSwitch(on: boolean) {
+  try {
+    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctor();
+    const now = ctx.currentTime;
+    const click = ctx.createOscillator();
+    const clickGain = ctx.createGain();
+    click.type = "square";
+    click.frequency.setValueAtTime(on ? 2100 : 1300, now);
+    clickGain.gain.setValueAtTime(0.07, now);
+    clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+    click.connect(clickGain).connect(ctx.destination);
+    click.start(now);
+    click.stop(now + 0.04);
+    const hum = ctx.createOscillator();
+    const humGain = ctx.createGain();
+    hum.type = "sine";
+    hum.frequency.setValueAtTime(on ? 420 : 320, now + 0.03);
+    hum.frequency.exponentialRampToValueAtTime(on ? 780 : 160, now + 0.16);
+    humGain.gain.setValueAtTime(0.0001, now + 0.03);
+    humGain.gain.exponentialRampToValueAtTime(0.08, now + 0.06);
+    humGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+    hum.connect(humGain).connect(ctx.destination);
+    hum.start(now + 0.03);
+    hum.stop(now + 0.24);
+    window.setTimeout(() => { void ctx.close(); }, 400);
+  } catch {}
+}
 
 function cleanMarkdownText(value: string): string {
   return value
@@ -119,15 +169,57 @@ export default function Home() {
   const [showHeader, setShowHeader] = useState(true);
   const [showPageNumbers, setShowPageNumbers] = useState(true);
   const [zoom, setZoom] = useState(95);
+  const [logo, setLogo] = useState<{ src: string; width: number; height: number; format: "png" | "jpg" | "gif" | "bmp" } | null>(null);
+  const [logoOnCover, setLogoOnCover] = useState(true);
+  const [logoInHeader, setLogoInHeader] = useState(false);
+  const [logoInFooter, setLogoInFooter] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
+  const [studioLight, setStudioLight] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const logoRef = useRef<HTMLInputElement>(null);
+  const heroRef = useRef<HTMLElement>(null);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const [dropActive, setDropActive] = useState(false);
   const theme = themes[themeKey];
   const activeAccent = accentOverride || theme.accent;
 
+  useEffect(() => {
+    try { if (localStorage.getItem("studio-light-mode") === "true") setStudioLight(true); } catch {}
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) if (entry.isIntersecting) { entry.target.classList.add("in-view"); observer.unobserve(entry.target); }
+    }, { threshold: 0.16 });
+    document.querySelectorAll(".reveal").forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, []);
+
+  const tilt = (event: React.MouseEvent<HTMLElement>) => {
+    const element = event.currentTarget;
+    const rect = element.getBoundingClientRect();
+    element.style.setProperty("--rx", `${((event.clientY - rect.top) / rect.height - 0.5) * -7}deg`);
+    element.style.setProperty("--ry", `${((event.clientX - rect.left) / rect.width - 0.5) * 9}deg`);
+  };
+  const untilt = (event: React.MouseEvent<HTMLElement>) => {
+    event.currentTarget.style.setProperty("--rx", "0deg");
+    event.currentTarget.style.setProperty("--ry", "0deg");
+  };
+  const heroMove = (event: React.MouseEvent<HTMLElement>) => {
+    const hero = heroRef.current;
+    if (!hero) return;
+    const rect = hero.getBoundingClientRect();
+    hero.style.setProperty("--mx", String((event.clientX - rect.left) / rect.width - 0.5));
+    hero.style.setProperty("--my", String((event.clientY - rect.top) / rect.height - 0.5));
+  };
+
+  const deferredMarkdown = useDeferredValue(markdown);
+  const isRendering = deferredMarkdown !== markdown;
   const html = useMemo(() => {
-    const previewMarkdown = numberedHeadings ? markdown.replace(/^(#{2,3})\s+\d+(?:\.\d+)*\.?\s+/gm, "$1 ") : markdown;
+    const previewMarkdown = numberedHeadings ? deferredMarkdown.replace(/^(#{2,3})\s+\d+(?:\.\d+)*\.?\s+/gm, "$1 ") : deferredMarkdown;
     const dirty = marked.parse(previewMarkdown, { gfm: true, breaks: true }) as string;
     return typeof window === "undefined" ? dirty : DOMPurify.sanitize(dirty);
-  }, [markdown, numberedHeadings]);
+  }, [deferredMarkdown, numberedHeadings]);
   const words = markdown.trim() ? markdown.trim().split(/\s+/).length : 0;
   const readingTime = Math.max(1, Math.ceil(words / 220));
   const padding = marginSize === "narrow" ? "42px" : marginSize === "wide" ? "88px" : "68px";
@@ -185,6 +277,74 @@ export default function Home() {
     reader.readAsText(file);
   };
 
+  const openLogo = (file?: File) => {
+    if (!file) return;
+    const format = ({ "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/bmp": "bmp" } as const)[file.type];
+    if (!format) {
+      flash("Please choose a PNG, JPG, GIF or BMP logo.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = String(reader.result ?? "");
+      const img = new Image();
+      img.onload = () => {
+        setLogo({ src, width: img.naturalWidth, height: img.naturalHeight, format });
+        flash("Logo added to the cover page.");
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const applyEdit = (nextValue: string, selectionStart: number, selectionEnd: number) => {
+    setMarkdown(nextValue);
+    requestAnimationFrame(() => {
+      const el = editorRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(selectionStart, selectionEnd);
+    });
+  };
+  const wrapSelection = (before: string, after = before, placeholder = "text") => {
+    const el = editorRef.current;
+    if (!el) return;
+    const { selectionStart: start, selectionEnd: end, value } = el;
+    const selected = value.slice(start, end) || placeholder;
+    applyEdit(value.slice(0, start) + before + selected + after + value.slice(end), start + before.length, start + before.length + selected.length);
+  };
+  const insertBlock = (snippet: string) => {
+    const el = editorRef.current;
+    if (!el) return;
+    const { selectionEnd: end, value } = el;
+    const needsBreak = end > 0 && value[end - 1] !== "\n" ? "\n\n" : end > 0 ? "\n" : "";
+    const inserted = needsBreak + snippet + "\n";
+    applyEdit(value.slice(0, end) + inserted + value.slice(end), end + inserted.length, end + inserted.length);
+  };
+
+  const toggleStudioLight = () => {
+    const next = !studioLight;
+    playBulbSwitch(next);
+    const wrap = document.querySelector(".studio-wrap");
+    wrap?.classList.add("theming");
+    window.setTimeout(() => wrap?.classList.remove("theming"), 900);
+    setStudioLight(next);
+    try { localStorage.setItem("studio-light-mode", String(next)); } catch {}
+    flash(next ? "Lights on — studio switched to light mode." : "Lights off — studio back to dark mode.");
+  };
+
+  const activePrompt = `${promptCore}${promptShapes[themeKey]}${promptEnd}`;
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(activePrompt);
+      setPromptCopied(true);
+      window.setTimeout(() => setPromptCopied(false), 2800);
+      flash(`${themes[themeKey].label} prompt copied — paste it into any AI chat.`);
+    } catch {
+      flash("Couldn't access the clipboard — select and copy the prompt manually.");
+    }
+  };
+
   const exportPdf = () => {
     flash("Print dialog opened — choose “Save as PDF”.");
     window.setTimeout(() => window.print(), 150);
@@ -193,7 +353,7 @@ export default function Home() {
   const exportDocx = async () => {
     flash("Building your professional Word document…");
     const {
-      AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, PageBreak, PageNumber,
+      AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, ImageRun, PageBreak, PageNumber,
       Packer, Paragraph, ShadingType, Table, TableCell, TableOfContents, TableRow, TextRun,
       VerticalAlign, WidthType,
     } = await import("docx");
@@ -212,9 +372,18 @@ export default function Home() {
       size: options.code ? 19 : 22,
     });
 
+    const logoData = logo ? Uint8Array.from(atob(logo.src.split(",")[1]), (char) => char.charCodeAt(0)) : null;
+    const logoImage = (targetHeight: number) => {
+      const height = Math.min(targetHeight, logo!.height);
+      const width = Math.round(logo!.width * (height / logo!.height));
+      return new ImageRun({ data: logoData!, transformation: { width, height }, type: logo!.format });
+    };
+    const coverLogo = Boolean(logo && logoOnCover);
+
     if (coverPage) {
+      if (coverLogo) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 700, after: 200 }, children: [logoImage(52)] }));
       children.push(
-        new Paragraph({ text: organization.toUpperCase(), alignment: AlignmentType.CENTER, spacing: { before: 900, after: 700 }, style: "CoverEyebrow" }),
+        new Paragraph({ text: organization.toUpperCase(), alignment: AlignmentType.CENTER, spacing: { before: coverLogo ? 200 : 900, after: 700 }, style: "CoverEyebrow" }),
         new Paragraph({ text: title, alignment: AlignmentType.CENTER, style: "CoverTitle", spacing: { after: 320 } }),
         new Paragraph({ text: `${themes[themeKey].label} document`, alignment: AlignmentType.CENTER, style: "Subtitle", spacing: { after: 900 } }),
         new Paragraph({ text: `Prepared by ${author}`, alignment: AlignmentType.CENTER, spacing: { after: 100 } }),
@@ -269,7 +438,7 @@ export default function Home() {
       creator: author,
       title,
       subject: themes[themeKey].category,
-      description: `Generated by Folio from ${filename}`,
+      description: `Generated by unmarkdown.in from ${filename}`,
       styles: {
         default: { document: { run: { font: theme.wordFont, size: 22, color: ink }, paragraph: { spacing: { line: 330 } } } },
         paragraphStyles: [
@@ -288,8 +457,8 @@ export default function Home() {
       },
       sections: [{
         properties: { page: { size: page, margin: { top: margins, right: margins, bottom: margins, left: margins } } },
-        headers: showHeader ? { default: new Header({ children: [new Paragraph({ children: [run(`${organization}  /  ${title}`, { bold: true, color: "6C737A" })], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "D8DCE0", space: 6 } } })] }) } : undefined,
-        footers: showPageNumbers ? { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [run(`${classification}   •   Version ${version}   •   `, { color: "747A80" }), new TextRun({ children: [PageNumber.CURRENT], font: theme.wordFont, size: 18, color: "747A80" })] })] }) } : undefined,
+        headers: showHeader ? { default: new Header({ children: [new Paragraph({ children: [...(logo && logoInHeader ? [logoImage(22), run("   ")] : []), run(`${organization}  /  ${title}`, { bold: true, color: "6C737A" })], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "D8DCE0", space: 6 } } })] }) } : undefined,
+        footers: showPageNumbers ? { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [...(logo && logoInFooter ? [logoImage(16), run("   ")] : []), run(`${classification}   •   Version ${version}   •   `, { color: "747A80" }), new TextRun({ children: [PageNumber.CURRENT], font: theme.wordFont, size: 18, color: "747A80" })] })] }) } : undefined,
         children,
       }],
     });
@@ -311,6 +480,9 @@ export default function Home() {
         <label>Title<input value={title} onChange={(e) => setTitle(e.target.value)} /></label>
         <label>Author<input value={author} onChange={(e) => setAuthor(e.target.value)} /></label>
         <label>Organization<input value={organization} onChange={(e) => setOrganization(e.target.value)} /></label>
+        <label>Company logo</label>
+        <div className="logo-row">{logo ? <><img src={logo.src} alt="Logo preview" /><button onClick={() => setLogo(null)}>Remove</button></> : <button onClick={() => logoRef.current?.click()}>Upload logo (PNG / JPG)</button>}</div>
+        {logo && <div className="logo-placement">{[["Cover page", logoOnCover, setLogoOnCover], ["Header", logoInHeader, setLogoInHeader], ["Footer", logoInFooter, setLogoInFooter]].map(([label, value, setter]) => <button key={String(label)} className={value ? "selected" : ""} onClick={() => (setter as (value: boolean) => void)(!value)}>{String(label)}</button>)}</div>}
         <div className="field-row"><label>Version<input value={version} onChange={(e) => setVersion(e.target.value)} /></label><label>Classification<input value={classification} onChange={(e) => setClassification(e.target.value)} /></label></div>
       </div>
       <div className="setting-section"><b>Page setup</b>
@@ -343,21 +515,66 @@ export default function Home() {
   return (
     <main>
       <nav className="nav shell">
-        <a className="brand" href="#top" aria-label="Folio home"><span>F</span>Folio</a>
-        <div className="nav-links"><a href="#features">Features</a><a href="#templates">Standards</a><a href="#studio">Studio</a></div>
+        <a className="brand" href="#top" aria-label="unmarkdown.in home"><span className="brand-mark" aria-hidden="true">M<i>↓</i></span><span className="brand-name">unmarkdown<em>.in</em></span></a>
+        <div className="nav-links"><a href="#idea">The idea</a><a href="#features">Features</a><a href="#templates">Standards</a><a href="#studio">Studio</a></div>
         <button className="nav-cta" onClick={() => fileRef.current?.click()}>Upload Markdown <span>↗</span></button>
       </nav>
 
-      <section className="hero shell" id="top">
-        <div className="eyebrow"><span /> Professional document studio</div>
-        <h1>Your Markdown,<br/><em>document ready.</em></h1>
-        <p className="hero-copy">Upload one Markdown file. Turn it into a policy, terms document, SRS, architecture document, executive report, research paper, or beautifully typeset publication.</p>
+      <section className="hero shell" id="top" ref={heroRef} onMouseMove={heroMove}>
+        <div className="eyebrow"><span /> The missing step after your AI chat</div>
+        <h1>AI writes Markdown.<br/><em>unmarkdown.in makes it official.</em></h1>
+        <p className="hero-copy">Asking an AI to generate a Word file burns tokens on formatting instead of thinking. Markdown is what models write best — fast, cheap, clean. Bring that Markdown here and leave with a boardroom-ready DOCX or PDF.</p>
         <div className="hero-actions"><button className="primary" onClick={() => fileRef.current?.click()}>Upload a .md file <span>→</span></button><a className="secondary" href="#studio">Explore the studio</a></div>
         <p className="privacy"><span>✓</span> Private by design — your Markdown never leaves your browser</p>
-        <div className="hero-rule"><span>01</span><i /><span>7 PROFESSIONAL STANDARDS</span></div>
+        <ol className="hero-flow" aria-label="How unmarkdown.in works">
+          <li><span>01</span><b>Ask your AI for Markdown</b><small>"Give me the report as .md" — a fraction of the tokens a DOCX skill costs</small></li>
+          <li className="flow-arrow" aria-hidden="true">→</li>
+          <li><span>02</span><b>Drop it into unmarkdown.in</b><small>Auto-detects the document type and applies a professional standard</small></li>
+          <li className="flow-arrow" aria-hidden="true">→</li>
+          <li><span>03</span><b>Export DOCX or PDF</b><small>Real Word styles, cover page, table of contents, page numbers</small></li>
+        </ol>
+        <div className="hero-scene" aria-hidden="true">
+          <div className="doc3d">
+            <div className="doc3d-float">
+              <div className="doc3d-page doc3d-md"><span>report.md</span><i className="l h"/><i className="l"/><i className="l s"/><i className="l"/><i className="l h2"/><i className="l"/><i className="l s"/><i className="l"/></div>
+              <div className="doc3d-page doc3d-doc"><span>report.docx</span><i className="l t"/><i className="l a"/><i className="l"/><i className="l s"/><div className="doc3d-table"><i/><i/><i/><i/><i/><i/><i/><i/><i/></div><i className="l"/><i className="l s"/></div>
+              <span className="doc3d-badge">6× fewer tokens</span>
+              <span className="doc3d-flow">→</span>
+            </div>
+            <div className="doc3d-shadow"/>
+          </div>
+        </div>
       </section>
 
-      <section className="studio-wrap" id="studio">
+      <section className="prompt-idea shell reveal" id="idea">
+        <div className="idea-copy">
+          <span className="section-kicker">THE CORE IDEA</span>
+          <h2>Don&apos;t ask AI for a Word file.<br/><em>Ask for Markdown.</em></h2>
+          <p>When an AI builds a DOCX or PDF, most of its tokens go into invisible XML and formatting instructions — thinking budget wasted on plumbing. One line in your chat changes everything: ask for Markdown in your document&apos;s professional standard, then convert it here into a boardroom-ready file.</p>
+          <button className="primary copy-btn" onClick={copyPrompt}>{promptCopied ? "✓ Copied — paste it into your AI chat" : `Copy the ${themes[themeKey].label} prompt`} <span>⧉</span></button>
+        </div>
+        <div className="chat-side">
+          <div className="standard-chips" role="tablist" aria-label="Choose a document standard for the prompt">
+            {(Object.keys(themes) as ThemeKey[]).map((key) => <button key={key} role="tab" aria-selected={themeKey === key} className={themeKey === key ? "selected" : ""} onClick={() => { setThemeKey(key); setAccentOverride(""); }}>{themes[key].label}</button>)}
+          </div>
+          <div className="chat-mock tilt-card" onMouseMove={tilt} onMouseLeave={untilt}>
+            <div className="chat-title"><i/><i/><i/><span>Any AI chat — ChatGPT, Claude, Gemini…</span></div>
+            <div className="bubble user"><small>You</small><p>&ldquo;{activePrompt}&rdquo;</p></div>
+            <div className="bubble ai"><small>AI</small><pre>{promptSamples[themeKey]}</pre><span className="bubble-note">✓ pure content · ~6× fewer tokens · already in {themes[themeKey].label} structure</span></div>
+            <div className="chat-next">Then drop the .md file into <b>unmarkdown.in →</b></div>
+          </div>
+        </div>
+      </section>
+
+      <section className={`studio-wrap ${studioLight ? "light" : ""}`} id="studio">
+        <div className={`bulb-rig ${studioLight ? "on" : ""}`}>
+          <button className="bulb" onClick={toggleStudioLight} aria-pressed={studioLight} aria-label={studioLight ? "Turn the studio lights off" : "Turn the studio lights on"} title={studioLight ? "Pull to turn the lights off" : "Pull to turn the lights on"}>
+            <span className="bulb-cord"/>
+            <span className="bulb-cap"/>
+            <span className="bulb-glass"><span className="bulb-filament"/></span>
+            <span className="bulb-glow"/>
+          </button>
+        </div>
         <div className="studio-heading shell"><div><span className="section-kicker">THE DOCUMENT STUDIO</span><h2>One source.<br/><em>Publication quality.</em></h2></div><p>Apply professional structure, page settings and Word styles to any uploaded Markdown file.</p></div>
         <div className="studio shell-wide">
           <div className="studio-bar">
@@ -370,16 +587,55 @@ export default function Home() {
             </div>
           </div>
           <div className="workspace">
-            <section className="editor-pane"><div className="pane-label"><span>MARKDOWN SOURCE</span><span>{words} words · {readingTime} min</span></div><textarea aria-label="Markdown editor" value={markdown} onChange={(e) => setMarkdown(e.target.value)} spellCheck="false" /></section>
+            <section
+              className={`editor-pane ${dropActive ? "drop-active" : ""}`}
+              onDragOver={(e) => { e.preventDefault(); setDropActive(true); }}
+              onDragLeave={() => setDropActive(false)}
+              onDrop={(e) => { e.preventDefault(); setDropActive(false); openFile(e.dataTransfer.files?.[0]); }}
+            >
+              <div className="pane-label"><span>MARKDOWN SOURCE</span><span>{words} words · {readingTime} min</span></div>
+              <div className="editor-toolbar" role="toolbar" aria-label="Markdown formatting">
+                <button title="Heading 2" onClick={() => insertBlock("## Section title")}>H2</button>
+                <button title="Heading 3" onClick={() => insertBlock("### Subsection")}>H3</button>
+                <span className="tool-sep" aria-hidden="true"/>
+                <button title="Bold" onClick={() => wrapSelection("**")}><b>B</b></button>
+                <button title="Italic" onClick={() => wrapSelection("*")}><i>I</i></button>
+                <button title="Strikethrough" onClick={() => wrapSelection("~~")}><s>S</s></button>
+                <button title="Inline code" onClick={() => wrapSelection("`", "`", "code")}>{"</>"}</button>
+                <span className="tool-sep" aria-hidden="true"/>
+                <button title="Bullet list" onClick={() => insertBlock("- First point\n- Second point\n- Third point")}>• List</button>
+                <button title="Numbered list" onClick={() => insertBlock("1. First step\n2. Second step\n3. Third step")}>1. Steps</button>
+                <button title="Quote" onClick={() => insertBlock("> A line worth highlighting.")}>❝ Quote</button>
+                <span className="tool-sep" aria-hidden="true"/>
+                <button title="Table" onClick={() => insertBlock("| Column | Column | Column |\n| --- | --- | --- |\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |")}>▦ Table</button>
+                <button title="Code block" onClick={() => insertBlock("```\ncode here\n```")}>Code</button>
+                <button title="Link" onClick={() => wrapSelection("[", "](https://example.com)", "link text")}>↗ Link</button>
+                <button title="Horizontal rule" onClick={() => insertBlock("---")}>— Rule</button>
+              </div>
+              <textarea ref={editorRef} aria-label="Markdown editor" value={markdown} onChange={(e) => setMarkdown(e.target.value)} spellCheck="false" />
+              {dropActive && <div className="drop-hint">Drop your .md file to load it</div>}
+            </section>
             <section className="preview-pane">
-              <div className="pane-label preview-toolbar"><span>DOCUMENT PREVIEW · {pageSize.toUpperCase()}</span><div className="preview-actions"><button aria-label="Zoom out" onClick={() => setZoom(Math.max(55, zoom - 10))}>−</button><span>{zoom}%</span><button aria-label="Zoom in" onClick={() => setZoom(Math.min(125, zoom + 10))}>＋</button><button className="fit-button" onClick={() => setZoom(95)}>Fit</button><span className="live"><i/> Live</span></div></div>
+              <div className="pane-label preview-toolbar"><span>DOCUMENT PREVIEW · {pageSize.toUpperCase()}</span><div className="preview-actions"><button aria-label="Zoom out" onClick={() => setZoom(Math.max(55, zoom - 10))}>−</button><span>{zoom}%</span><button aria-label="Zoom in" onClick={() => setZoom(Math.min(125, zoom + 10))}>＋</button><button className="fit-button" onClick={() => setZoom(95)}>Fit</button><span className={`live ${isRendering ? "busy" : ""}`}><i/> {isRendering ? "Rendering…" : "Live"}</span></div></div>
               <div className="preview-scroll" tabIndex={0} aria-label="Scrollable document preview">
                 <div className="page-stage">
-                  <div className={`paper document-shell page-${pageSize} margin-${marginSize}`} style={{ "--accent": activeAccent, "--ink": theme.ink, "--paper": theme.paper, "--doc-font": theme.font, "--page-padding": padding, "--body-size": `${bodySize}px`, "--line-height": lineHeight, zoom: zoom / 100 } as React.CSSProperties}>
-                    {showHeader && <div className="paper-header"><span>{organization}</span><span>{classification} · V{version}</span></div>}
-                    {coverPage && <section className="cover-preview"><small>{organization}</small><h1>{title}</h1><p>{themes[themeKey].category}</p><div><span>{author}</span><span>Version {version}</span></div></section>}
+                  <div key={`${themeKey}-${pageSize}-${marginSize}`} className={`paper document-shell page-${pageSize} margin-${marginSize}`} style={{ "--accent": activeAccent, "--ink": theme.ink, "--paper": theme.paper, "--doc-font": theme.font, "--page-padding": padding, "--body-size": `${bodySize}px`, "--line-height": lineHeight, zoom: zoom / 100 } as React.CSSProperties}>
+                    {showHeader && <div className="paper-header"><span className="header-brand">{logo && logoInHeader && <img src={logo.src} alt="" />}{organization}</span><span>{classification} · V{version}</span></div>}
+                    {coverPage && <section className="cover-preview">
+                      <button className="cover-remove" title="Remove the cover page (re-enable in Document setup)" onClick={() => { setCoverPage(false); flash("Cover removed — re-enable it in Document setup."); }}>× Remove cover</button>
+                      {logo && logoOnCover && <div className="cover-logo"><img src={logo.src} alt={`${organization} logo`} /><button title="Remove logo from cover" onClick={() => setLogoOnCover(false)}>×</button></div>}
+                      {!logo && <button className="logo-add" onClick={() => logoRef.current?.click()}>+ Add company logo</button>}
+                      <small contentEditable suppressContentEditableWarning spellCheck={false} onBlur={(e) => setOrganization(e.currentTarget.textContent?.trim() || organization)}>{organization}</small>
+                      <h1 contentEditable suppressContentEditableWarning spellCheck={false} onBlur={(e) => setTitle(e.currentTarget.textContent?.trim() || title)}>{title}</h1>
+                      <p>{themes[themeKey].category}</p>
+                      <div>
+                        <span contentEditable suppressContentEditableWarning spellCheck={false} onBlur={(e) => setAuthor(e.currentTarget.textContent?.trim() || author)}>{author}</span>
+                        <span>Version <span contentEditable suppressContentEditableWarning spellCheck={false} onBlur={(e) => setVersion(e.currentTarget.textContent?.trim() || version)}>{version}</span></span>
+                      </div>
+                      <em className="cover-hint">Click any line to edit</em>
+                    </section>}
                     <article className={`document-preview theme-${themeKey} ${numberedHeadings ? "numbered-headings" : ""}`} dangerouslySetInnerHTML={{ __html: html }} />
-                    {showPageNumbers && <div className="paper-footer"><span>{filename}</span><span>01</span></div>}
+                    {showPageNumbers && <div className="paper-footer"><span>{filename}</span>{logo && logoInFooter && <img className="footer-logo" src={logo.src} alt="" />}<span>01</span></div>}
                   </div>
                 </div>
               </div>
@@ -390,20 +646,41 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="economics shell reveal" id="why">
+        <div className="econ-copy">
+          <span className="section-kicker">THE TOKEN MATH</span>
+          <h2>Spend tokens on thinking,<br/><em>not formatting.</em></h2>
+          <p>When an AI generates a DOCX directly, most of the output is invisible formatting instructions. Ask for Markdown instead — the same content in a fraction of the tokens — and let unmarkdown.in handle the document craft.</p>
+        </div>
+        <div className="econ-chart tilt-card" onMouseMove={tilt} onMouseLeave={untilt} role="img" aria-label="Token cost comparison: direct DOCX generation uses roughly six times more tokens than Markdown">
+          <div className="econ-row"><div className="econ-label"><b>AI generates DOCX</b><small>styles, XML, layout instructions</small></div><div className="econ-bar"><i style={{ width: "100%" }}/><span>~6× tokens</span></div></div>
+          <div className="econ-row"><div className="econ-label"><b>AI writes Markdown</b><small>pure content, zero overhead</small></div><div className="econ-bar"><i className="econ-md" style={{ width: "17%" }}/><span>1×</span></div></div>
+          <p className="econ-note">Same document. unmarkdown.in adds the cover page, Word styles, tables and numbering — for free, in your browser.</p>
+        </div>
+      </section>
+
       <section className="templates shell" id="templates">
-        <div className="section-title"><span className="section-kicker">PROFESSIONAL STANDARDS</span><h2>Built for real documents.</h2><p>Choose a standard and Folio applies its typography, hierarchy, spacing, tables and Word styles to your Markdown.</p></div>
-        <div className="template-grid">
-          {(Object.keys(themes) as ThemeKey[]).map((key, index) => <button key={key} className={`template-card ${themeKey === key ? "selected" : ""}`} onClick={() => { setThemeKey(key); setAccentOverride(""); }}>
-            <div className={`mini-page mini-${key}`}><small>FOLIO / 0{index + 1}</small><h3>{themes[key].sample}</h3><i/><p>{themes[key].category}</p></div>
+        <div className="section-title reveal"><span className="section-kicker">PROFESSIONAL STANDARDS</span><h2>Built for real documents.</h2><p>Pick a standard — unmarkdown.in applies its typography, hierarchy, spacing, tables and Word styles, then takes you straight to the studio.</p></div>
+        <div className="template-grid reveal">
+          {(Object.keys(themes) as ThemeKey[]).map((key, index) => <button key={key} className={`template-card ${themeKey === key ? "selected" : ""}`} onMouseMove={tilt} onMouseLeave={untilt} onClick={() => { setThemeKey(key); setAccentOverride(""); document.querySelector("#studio")?.scrollIntoView({ behavior: "smooth" }); flash(`${themes[key].label} standard applied.`); }}>
+            <div className={`mini-page mini-${key}`}><small>UNMARKDOWN / 0{index + 1}</small><h3>{themes[key].sample}</h3><i/><p>{themes[key].category}</p></div>
             <div className="template-meta"><div><b>{themes[key].label}</b><small>{themes[key].description}</small></div><span>{themeKey === key ? "✓" : "→"}</span></div>
           </button>)}
         </div>
       </section>
 
-      <section className="features" id="features"><div className="shell feature-grid"><div><span className="feature-no">01</span><h3>Standards, not skins</h3><p>Legal, SRS, architecture, executive, editorial, academic and technical standards shape preview and export.</p></div><div><span className="feature-no">02</span><h3>Style without limits</h3><p>Eight CSS recipes, live colour and typography controls, plus unrestricted custom CSS for every uploaded file.</p></div><div><span className="feature-no">03</span><h3>Word-native output</h3><p>Real headings, styled tables, numbered lists, code blocks and editable document structure.</p></div></div></section>
+      <section className="features" id="features"><div className="shell feature-grid reveal"><div><span className="feature-no">01</span><h3>Standards, not skins</h3><p>Legal, SRS, architecture, executive, editorial, academic and technical standards shape preview and export.</p></div><div><span className="feature-no">02</span><h3>Style without limits</h3><p>Eight CSS recipes, live colour and typography controls, plus unrestricted custom CSS for every uploaded file.</p></div><div><span className="feature-no">03</span><h3>Word-native output</h3><p>Real headings, styled tables, numbered lists, code blocks and editable document structure.</p></div></div></section>
 
-      <footer className="shell"><a className="brand" href="#top"><span>F</span>Folio</a><p>Professional documents from one Markdown file.</p><small>Private · precise · publication ready</small></footer>
+      <section className="cta-band">
+        <div className="shell cta-inner reveal">
+          <div><span className="section-kicker">READY WHEN YOUR AI IS</span><h2>Paste the Markdown.<br/><em>Ship the document.</em></h2></div>
+          <button className="primary" onClick={() => fileRef.current?.click()}>Upload a .md file <span>→</span></button>
+        </div>
+      </section>
+
+      <footer className="shell"><a className="brand" href="#top" aria-label="unmarkdown.in home"><span className="brand-mark" aria-hidden="true">M<i>↓</i></span><span className="brand-name">unmarkdown<em>.in</em></span></a><p>Professional documents from one Markdown file.</p><small>Private · precise · publication ready</small></footer>
       <input ref={fileRef} className="sr-only" type="file" accept=".md,text/markdown,text/plain" onChange={(e) => openFile(e.target.files?.[0])}/>
+      <input ref={logoRef} className="sr-only" type="file" accept="image/png,image/jpeg,image/gif,image/bmp" onChange={(e) => { openLogo(e.target.files?.[0]); e.target.value = ""; }}/>
       <style>{`${customCss}\n@media print { @page { size: ${pageSize === "a4" ? "A4" : "Letter"}; } }`}</style>
       {notice && <div className="toast" role="status">{notice}</div>}
     </main>
