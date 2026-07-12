@@ -75,6 +75,16 @@ const cssPresets = {
 
 type ThemeKey = keyof typeof themes;
 
+const recommendedRecipes: Record<ThemeKey, CssPresetKey[]> = {
+  legal: ["policy", "classic", "compact"],
+  srs: ["corporate", "blueprint", "printSafe"],
+  architecture: ["technical", "blueprint", "modern"],
+  executive: ["report", "corporate", "spacious"],
+  editorial: ["newsletter", "twoColumn", "classic"],
+  academic: ["classic", "accessible", "printSafe"],
+  minimal: ["technical", "monochrome", "compact"],
+};
+
 const promptCore = `Do NOT generate a DOCX or PDF file — that wastes your tokens on invisible formatting instead of quality content. Reply with the complete document as clean, well-structured Markdown (.md) only — no preamble and no code fence around the document. `;
 const promptEnd = ` I'll convert it into a professional Word/PDF myself.`;
 const promptShapes: Record<ThemeKey, string> = {
@@ -154,7 +164,7 @@ export default function Home() {
   const [accentOverride, setAccentOverride] = useState("");
   const [bodySize, setBodySize] = useState(12.5);
   const [lineHeight, setLineHeight] = useState(1.72);
-  const [panel, setPanel] = useState<"settings" | "css" | null>(null);
+  const [panel, setPanel] = useState<"settings" | "css" | "format" | null>(null);
   const [notice, setNotice] = useState("");
   const [title, setTitle] = useState("Software Requirements Specification");
   const [author, setAuthor] = useState("Product & Engineering Team");
@@ -179,7 +189,46 @@ export default function Home() {
   const logoRef = useRef<HTMLInputElement>(null);
   const heroRef = useRef<HTMLElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const userEditedRef = useRef(false);
   const [dropActive, setDropActive] = useState(false);
+
+  const loadSample = async (key: ThemeKey) => {
+    try {
+      const response = await fetch(`/samples/${key}.md`);
+      if (!response.ok) return;
+      const text = await response.text();
+      setMarkdown(text);
+      setFilename(`${key}-sample.md`);
+      const heading = text.match(/^#\s+(.+)$/m)?.[1];
+      if (heading) setTitle(cleanMarkdownText(heading));
+    } catch {}
+  };
+
+  const applyStandard = (key: ThemeKey) => {
+    setThemeKey(key);
+    setAccentOverride("");
+    if (!userEditedRef.current) loadSample(key);
+    flash(`${themes[key].label} standard applied.`);
+  };
+
+  const fitPreview = () => {
+    const scroller = previewRef.current;
+    if (!scroller) return;
+    const paperWidth = scroller.querySelector<HTMLElement>(".paper")?.offsetWidth || 680;
+    const stagePadding = window.innerWidth <= 620 ? 48 : 120;
+    setZoom(Math.max(40, Math.min(125, Math.floor(((scroller.clientWidth - stagePadding) / paperWidth) * 100))));
+  };
+
+  useEffect(() => {
+    if (window.innerWidth >= 700) return;
+    const id = window.setTimeout(() => {
+      const scroller = document.querySelector<HTMLElement>(".preview-scroll");
+      const paperWidth = scroller?.querySelector<HTMLElement>(".paper")?.offsetWidth || 600;
+      if (scroller) setZoom(Math.max(40, Math.min(125, Math.floor(((scroller.clientWidth - 48) / paperWidth) * 100))));
+    }, 120);
+    return () => window.clearTimeout(id);
+  }, []);
   const theme = themes[themeKey];
   const activeAccent = accentOverride || theme.accent;
 
@@ -238,6 +287,7 @@ export default function Home() {
     const reader = new FileReader();
     reader.onload = () => {
       const value = String(reader.result ?? "");
+      userEditedRef.current = true;
       setMarkdown(value);
       setFilename(file.name);
       const rawLines = value.split(/\r?\n/);
@@ -272,7 +322,8 @@ export default function Home() {
         setActivePreset("classic");
       }
       document.querySelector("#studio")?.scrollIntoView({ behavior: "smooth" });
-      flash("Markdown loaded privately in your browser.");
+      setPanel("format");
+      flash("Markdown loaded — pick or confirm a document format.");
     };
     reader.readAsText(file);
   };
@@ -298,6 +349,7 @@ export default function Home() {
   };
 
   const applyEdit = (nextValue: string, selectionStart: number, selectionEnd: number) => {
+    userEditedRef.current = true;
     setMarkdown(nextValue);
     requestAnimationFrame(() => {
       const el = editorRef.current;
@@ -473,6 +525,33 @@ export default function Home() {
     flash("Professional DOCX downloaded.");
   };
 
+  const formatPanel = <aside className="inspector-pane format-pane">
+    <div className="pane-label"><span>DOCUMENT FORMAT</span><button onClick={() => setPanel(null)}>×</button></div>
+    <div className="inspector-scroll">
+      <div className="format-intro"><b>Pick a professional standard</b><p>Switch any time — before or after uploading. The preview and both exports update instantly.</p></div>
+      <div className="format-grid">
+        {(Object.keys(themes) as ThemeKey[]).map((key) => {
+          const option = themes[key];
+          return <button key={key} className={`format-option ${themeKey === key ? "selected" : ""}`} onClick={() => applyStandard(key)}>
+            <span className="format-swatch" style={{ background: option.paper, color: option.ink, fontFamily: option.font }}><i style={{ background: option.accent }}/>{option.sample.split("\n")[0]}</span>
+            <span className="format-meta"><b>{option.label}</b><small>{option.category}</small><em>{option.description}</em></span>
+            <span className="format-check">{themeKey === key ? "✓" : "→"}</span>
+          </button>;
+        })}
+      </div>
+      <div className="format-sample">
+        <button onClick={() => { if (!userEditedRef.current || window.confirm("Replace the current Markdown with this standard's sample document?")) { userEditedRef.current = false; loadSample(themeKey); flash(`${theme.label} sample loaded.`); } }}>↺ Load a {theme.label} sample document</button>
+      </div>
+      <div className="format-recipes">
+        <div className="style-section-title"><span>Suggested layouts · {theme.label}</span></div>
+        <div className="recipe-chips">
+          {recommendedRecipes[themeKey].map((key) => <button key={key} className={activePreset === key ? "selected" : ""} onClick={() => { setCustomCss(cssPresets[key].css); setActivePreset(key); flash(`${cssPresets[key].label} layout applied.`); }}><b>{cssPresets[key].label}</b><small>{cssPresets[key].description}</small></button>)}
+        </div>
+        <p className="setting-note">Need more? The Style Lab has all {Object.keys(cssPresets).length} layout recipes plus unrestricted custom CSS.</p>
+      </div>
+    </div>
+  </aside>;
+
   const settingsPanel = <aside className="inspector-pane">
     <div className="pane-label"><span>DOCUMENT SETUP</span><button onClick={() => setPanel(null)}>×</button></div>
     <div className="inspector-scroll">
@@ -581,6 +660,7 @@ export default function Home() {
             <div className="file-name"><span className="file-mark">MD</span><div><b>{filename}</b><small>{themes[themeKey].label} · {pageSize.toUpperCase()}</small></div></div>
             <div className="bar-tools">
               <button onClick={() => fileRef.current?.click()}>＋ Upload .md</button>
+              <button className={panel === "format" ? "active" : ""} onClick={() => setPanel(panel === "format" ? null : "format")}>⊞ Format</button>
               <button className={panel === "settings" ? "active" : ""} onClick={() => setPanel(panel === "settings" ? null : "settings")}>⚙ Document setup</button>
               <button className={panel === "css" ? "active" : ""} onClick={() => setPanel(panel === "css" ? null : "css")}>✦ Style Lab</button>
               <span className="divider"/><button onClick={exportPdf}>↓ PDF</button><button className="export" onClick={exportDocx}>↓ Professional DOCX</button>
@@ -612,12 +692,12 @@ export default function Home() {
                 <button title="Link" onClick={() => wrapSelection("[", "](https://example.com)", "link text")}>↗ Link</button>
                 <button title="Horizontal rule" onClick={() => insertBlock("---")}>— Rule</button>
               </div>
-              <textarea ref={editorRef} aria-label="Markdown editor" value={markdown} onChange={(e) => setMarkdown(e.target.value)} spellCheck="false" />
+              <textarea ref={editorRef} aria-label="Markdown editor" value={markdown} onChange={(e) => { userEditedRef.current = true; setMarkdown(e.target.value); }} spellCheck="false" />
               {dropActive && <div className="drop-hint">Drop your .md file to load it</div>}
             </section>
             <section className="preview-pane">
-              <div className="pane-label preview-toolbar"><span>DOCUMENT PREVIEW · {pageSize.toUpperCase()}</span><div className="preview-actions"><button aria-label="Zoom out" onClick={() => setZoom(Math.max(55, zoom - 10))}>−</button><span>{zoom}%</span><button aria-label="Zoom in" onClick={() => setZoom(Math.min(125, zoom + 10))}>＋</button><button className="fit-button" onClick={() => setZoom(95)}>Fit</button><span className={`live ${isRendering ? "busy" : ""}`}><i/> {isRendering ? "Rendering…" : "Live"}</span></div></div>
-              <div className="preview-scroll" tabIndex={0} aria-label="Scrollable document preview">
+              <div className="pane-label preview-toolbar"><span>DOCUMENT PREVIEW · {pageSize.toUpperCase()}</span><div className="preview-actions"><button aria-label="Zoom out" onClick={() => setZoom(Math.max(40, zoom - 10))}>−</button><span>{zoom}%</span><button aria-label="Zoom in" onClick={() => setZoom(Math.min(125, zoom + 10))}>＋</button><button className="fit-button" onClick={fitPreview}>Fit</button><span className={`live ${isRendering ? "busy" : ""}`}><i/> {isRendering ? "Rendering…" : "Live"}</span></div></div>
+              <div className="preview-scroll" ref={previewRef} tabIndex={0} aria-label="Scrollable document preview">
                 <div className="page-stage">
                   <div key={`${themeKey}-${pageSize}-${marginSize}`} className={`paper document-shell page-${pageSize} margin-${marginSize}`} style={{ "--accent": activeAccent, "--ink": theme.ink, "--paper": theme.paper, "--doc-font": theme.font, "--page-padding": padding, "--body-size": `${bodySize}px`, "--line-height": lineHeight, zoom: zoom / 100 } as React.CSSProperties}>
                     {showHeader && <div className="paper-header"><span className="header-brand">{logo && logoInHeader && <img src={logo.src} alt="" />}{organization}</span><span>{classification} · V{version}</span></div>}
@@ -642,6 +722,7 @@ export default function Home() {
             </section>
             {panel === "settings" && settingsPanel}
             {panel === "css" && styleLabPanel}
+            {panel === "format" && formatPanel}
           </div>
         </div>
       </section>
@@ -662,7 +743,7 @@ export default function Home() {
       <section className="templates shell" id="templates">
         <div className="section-title reveal"><span className="section-kicker">PROFESSIONAL STANDARDS</span><h2>Built for real documents.</h2><p>Pick a standard — unmarkdown.in applies its typography, hierarchy, spacing, tables and Word styles, then takes you straight to the studio.</p></div>
         <div className="template-grid reveal">
-          {(Object.keys(themes) as ThemeKey[]).map((key, index) => <button key={key} className={`template-card ${themeKey === key ? "selected" : ""}`} onMouseMove={tilt} onMouseLeave={untilt} onClick={() => { setThemeKey(key); setAccentOverride(""); document.querySelector("#studio")?.scrollIntoView({ behavior: "smooth" }); flash(`${themes[key].label} standard applied.`); }}>
+          {(Object.keys(themes) as ThemeKey[]).map((key, index) => <button key={key} className={`template-card ${themeKey === key ? "selected" : ""}`} onMouseMove={tilt} onMouseLeave={untilt} onClick={() => { applyStandard(key); document.querySelector("#studio")?.scrollIntoView({ behavior: "smooth" }); }}>
             <div className={`mini-page mini-${key}`}><small>UNMARKDOWN / 0{index + 1}</small><h3>{themes[key].sample}</h3><i/><p>{themes[key].category}</p></div>
             <div className="template-meta"><div><b>{themes[key].label}</b><small>{themes[key].description}</small></div><span>{themeKey === key ? "✓" : "→"}</span></div>
           </button>)}
