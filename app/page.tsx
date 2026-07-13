@@ -608,7 +608,7 @@ export default function Home() {
         <ol className="hero-flow" aria-label="How unmarkdown.in works">
           <li><span>01</span><b>Ask your AI for Markdown</b><small>"Give me the report as .md" — a fraction of the tokens a DOCX skill costs</small></li>
           <li className="flow-arrow" aria-hidden="true">→</li>
-          <li><span>02</span><b>Drop it into unmarkdown.in</b><small>Auto-detects the document type and applies a professional standard</small></li>
+          <li><span>02</span><b>Drop it into unmarkdown.in</b><small>Choose the right document standard and preview the polished result instantly</small></li>
           <li className="flow-arrow" aria-hidden="true">→</li>
           <li><span>03</span><b>Export DOCX or PDF</b><small>Real Word styles, cover page, table of contents, page numbers</small></li>
         </ol>
