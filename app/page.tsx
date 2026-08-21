@@ -1,7 +1,7 @@
 "use client";
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { marked, Tokens } from "marked";
+import { marked, Renderer, Tokens } from "marked";
 import DOMPurify from "dompurify";
 
 const starter = `# Software Requirements Specification
@@ -108,6 +108,18 @@ const promptSamples: Record<ThemeKey, string> = {
 type CssPresetKey = keyof typeof cssPresets;
 type PageSize = "a4" | "letter";
 type MarginSize = "narrow" | "normal" | "wide";
+type LogoSize = "small" | "standard" | "large";
+
+type BrandKit = {
+  organization: string;
+  accent: string;
+  footerText: string;
+  logo: { src: string; width: number; height: number; format: "png" | "jpg" | "gif" | "bmp" } | null;
+  logoOnCover: boolean;
+  logoInHeader: boolean;
+  logoInFooter: boolean;
+  logoSize: LogoSize;
+};
 
 function playBulbSwitch(on: boolean) {
   try {
@@ -155,6 +167,45 @@ function plainText(token: Tokens.Generic): string {
   return "";
 }
 
+let diagramId = 0;
+
+async function renderMermaidSvg(source: string, accent: string, ink: string) {
+  const { default: mermaid } = await import("mermaid");
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: "strict",
+    theme: "base",
+    themeVariables: { primaryColor: `${accent}22`, primaryBorderColor: accent, primaryTextColor: ink, lineColor: accent, fontFamily: "Arial, sans-serif" },
+  });
+  return (await mermaid.render(`unmarkdown-diagram-${++diagramId}`, source)).svg;
+}
+
+async function mermaidPng(svg: string) {
+  const viewBox = svg.match(/viewBox=["']\s*[\d.-]+\s+[\d.-]+\s+([\d.]+)\s+([\d.]+)["']/i);
+  const sourceWidth = Number(viewBox?.[1]) || 800;
+  const sourceHeight = Number(viewBox?.[2]) || 450;
+  const width = Math.min(560, sourceWidth);
+  const height = Math.round(sourceHeight * (width / sourceWidth));
+  const blobUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
+  try {
+    const image = new Image();
+    image.src = blobUrl;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = width * 2;
+    canvas.height = height * 2;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Canvas unavailable");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const data = Uint8Array.from(atob(canvas.toDataURL("image/png").split(",")[1]), (char) => char.charCodeAt(0));
+    return { data, width, height };
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}
+
 export default function Home() {
   const [markdown, setMarkdown] = useState(starter);
   const [filename, setFilename] = useState("software-requirements.md");
@@ -177,19 +228,26 @@ export default function Home() {
   const [tableOfContents, setTableOfContents] = useState(true);
   const [numberedHeadings, setNumberedHeadings] = useState(true);
   const [showHeader, setShowHeader] = useState(true);
+  const [showFooter, setShowFooter] = useState(true);
   const [showPageNumbers, setShowPageNumbers] = useState(true);
   const [zoom, setZoom] = useState(95);
   const [logo, setLogo] = useState<{ src: string; width: number; height: number; format: "png" | "jpg" | "gif" | "bmp" } | null>(null);
   const [logoOnCover, setLogoOnCover] = useState(true);
   const [logoInHeader, setLogoInHeader] = useState(false);
   const [logoInFooter, setLogoInFooter] = useState(false);
+  const [logoSize, setLogoSize] = useState<LogoSize>("standard");
+  const [footerText, setFooterText] = useState("");
   const [promptCopied, setPromptCopied] = useState(false);
   const [studioLight, setStudioLight] = useState(false);
+  const [showStart, setShowStart] = useState(true);
+  const [isPdfExporting, setIsPdfExporting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const logoRef = useRef<HTMLInputElement>(null);
   const heroRef = useRef<HTMLElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const paperRef = useRef<HTMLDivElement>(null);
   const userEditedRef = useRef(false);
   const [dropActive, setDropActive] = useState(false);
 
@@ -207,7 +265,6 @@ export default function Home() {
 
   const applyStandard = (key: ThemeKey) => {
     setThemeKey(key);
-    setAccentOverride("");
     if (!userEditedRef.current) loadSample(key);
     flash(`${themes[key].label} standard applied.`);
   };
@@ -215,7 +272,7 @@ export default function Home() {
   const fitPreview = () => {
     const scroller = previewRef.current;
     if (!scroller) return;
-    const paperWidth = scroller.querySelector<HTMLElement>(".paper")?.offsetWidth || 680;
+    const paperWidth = scroller.querySelector<HTMLElement>(".paper")?.offsetWidth || 794;
     const stagePadding = window.innerWidth <= 620 ? 48 : 120;
     setZoom(Math.max(40, Math.min(125, Math.floor(((scroller.clientWidth - stagePadding) / paperWidth) * 100))));
   };
@@ -224,16 +281,34 @@ export default function Home() {
     if (window.innerWidth >= 700) return;
     const id = window.setTimeout(() => {
       const scroller = document.querySelector<HTMLElement>(".preview-scroll");
-      const paperWidth = scroller?.querySelector<HTMLElement>(".paper")?.offsetWidth || 600;
+      const paperWidth = scroller?.querySelector<HTMLElement>(".paper")?.offsetWidth || 794;
       if (scroller) setZoom(Math.max(40, Math.min(125, Math.floor(((scroller.clientWidth - 48) / paperWidth) * 100))));
     }, 120);
     return () => window.clearTimeout(id);
   }, []);
   const theme = themes[themeKey];
   const activeAccent = accentOverride || theme.accent;
+  const logoScale = logoSize === "small" ? 0.72 : logoSize === "large" ? 1.3 : 1;
+  const resolvedFooterText = footerText.trim() || `${organization} · ${classification}`;
 
   useEffect(() => {
-    try { if (localStorage.getItem("studio-light-mode") === "true") setStudioLight(true); } catch {}
+    const id = window.setTimeout(() => {
+      try {
+        if (localStorage.getItem("studio-light-mode") === "true") setStudioLight(true);
+        const raw = localStorage.getItem("unmarkdown-brand-kit");
+        if (!raw) return;
+        const saved = JSON.parse(raw) as Partial<BrandKit>;
+        if (typeof saved.organization === "string") setOrganization(saved.organization);
+        if (typeof saved.accent === "string" && /^#[0-9a-f]{6}$/i.test(saved.accent)) setAccentOverride(saved.accent);
+        if (typeof saved.footerText === "string") setFooterText(saved.footerText);
+        if (typeof saved.logoOnCover === "boolean") setLogoOnCover(saved.logoOnCover);
+        if (typeof saved.logoInHeader === "boolean") setLogoInHeader(saved.logoInHeader);
+        if (typeof saved.logoInFooter === "boolean") setLogoInFooter(saved.logoInFooter);
+        if (["small", "standard", "large"].includes(saved.logoSize ?? "")) setLogoSize(saved.logoSize as LogoSize);
+        if (saved.logo && /^data:image\/(?:png|jpeg|gif|bmp);base64,/i.test(saved.logo.src) && saved.logo.width > 0 && saved.logo.height > 0) setLogo(saved.logo);
+      } catch {}
+    }, 0);
+    return () => window.clearTimeout(id);
   }, []);
 
   useEffect(() => {
@@ -266,12 +341,37 @@ export default function Home() {
   const isRendering = deferredMarkdown !== markdown;
   const html = useMemo(() => {
     const previewMarkdown = numberedHeadings ? deferredMarkdown.replace(/^(#{2,3})\s+\d+(?:\.\d+)*\.?\s+/gm, "$1 ") : deferredMarkdown;
-    const dirty = marked.parse(previewMarkdown, { gfm: true, breaks: true }) as string;
+    const renderer = new Renderer();
+    const renderCode = renderer.code.bind(renderer);
+    renderer.code = (token) => token.lang?.trim().toLowerCase() === "mermaid"
+      ? `<div class="mermaid-diagram" data-source="${encodeURIComponent(token.text)}" role="img" aria-label="Diagram preview"><span>Rendering diagram...</span></div>`
+      : renderCode(token);
+    const dirty = marked.parse(previewMarkdown, { gfm: true, breaks: true, renderer }) as string;
     return typeof window === "undefined" ? dirty : DOMPurify.sanitize(dirty);
   }, [deferredMarkdown, numberedHeadings]);
   const words = markdown.trim() ? markdown.trim().split(/\s+/).length : 0;
   const readingTime = Math.max(1, Math.ceil(words / 220));
   const padding = marginSize === "narrow" ? "42px" : marginSize === "wide" ? "88px" : "68px";
+
+  useEffect(() => {
+    const diagrams = Array.from(previewRef.current?.querySelectorAll<HTMLElement>(".mermaid-diagram") ?? []);
+    if (!diagrams.length) return;
+    let cancelled = false;
+    void (async () => {
+      for (const diagram of diagrams) {
+        try {
+          const svg = await renderMermaidSvg(decodeURIComponent(diagram.dataset.source ?? ""), activeAccent, theme.ink);
+          if (!cancelled) diagram.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
+        } catch {
+          if (!cancelled) {
+            diagram.classList.add("diagram-error");
+            diagram.textContent = "Diagram could not be rendered. Check the Mermaid syntax.";
+          }
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [html, activeAccent, theme.ink]);
 
   const flash = (message: string) => {
     setNotice(message);
@@ -280,6 +380,10 @@ export default function Home() {
 
   const openFile = (file?: File) => {
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      flash("Please choose a Markdown file smaller than 5 MB.");
+      return;
+    }
     if (!file.name.toLowerCase().endsWith(".md") && file.type !== "text/markdown") {
       flash("Please choose a Markdown (.md) file.");
       return;
@@ -288,6 +392,7 @@ export default function Home() {
     reader.onload = () => {
       const value = String(reader.result ?? "");
       userEditedRef.current = true;
+      setShowStart(false);
       setMarkdown(value);
       setFilename(file.name);
       const rawLines = value.split(/\r?\n/);
@@ -330,6 +435,10 @@ export default function Home() {
 
   const openLogo = (file?: File) => {
     if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      flash("Please choose a logo smaller than 2 MB.");
+      return;
+    }
     const format = ({ "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/bmp": "bmp" } as const)[file.type];
     if (!format) {
       flash("Please choose a PNG, JPG, GIF or BMP logo.");
@@ -348,8 +457,24 @@ export default function Home() {
     reader.readAsDataURL(file);
   };
 
+  const saveBrandKit = () => {
+    try {
+      const brandKit: BrandKit = { organization, accent: accentOverride, footerText, logo, logoOnCover, logoInHeader, logoInFooter, logoSize };
+      localStorage.setItem("unmarkdown-brand-kit", JSON.stringify(brandKit));
+      flash("Brand kit saved in this browser.");
+    } catch {
+      flash("Couldn't save the brand kit. Try a smaller logo.");
+    }
+  };
+
+  const forgetBrandKit = () => {
+    try { localStorage.removeItem("unmarkdown-brand-kit"); } catch {}
+    flash("Saved brand kit removed. Current document is unchanged.");
+  };
+
   const applyEdit = (nextValue: string, selectionStart: number, selectionEnd: number) => {
     userEditedRef.current = true;
+    setShowStart(false);
     setMarkdown(nextValue);
     requestAnimationFrame(() => {
       const el = editorRef.current;
@@ -372,6 +497,22 @@ export default function Home() {
     const needsBreak = end > 0 && value[end - 1] !== "\n" ? "\n\n" : end > 0 ? "\n" : "";
     const inserted = needsBreak + snippet + "\n";
     applyEdit(value.slice(0, end) + inserted + value.slice(end), end + inserted.length, end + inserted.length);
+  };
+
+  const startWriting = () => {
+    const blankDocument = "# Untitled Document\n\n";
+    userEditedRef.current = true;
+    setShowStart(false);
+    setMarkdown(blankDocument);
+    setFilename("untitled.md");
+    setTitle("Untitled Document");
+    setPanel(null);
+    requestAnimationFrame(() => {
+      const editor = editorRef.current;
+      if (!editor) return;
+      editor.focus();
+      editor.setSelectionRange(blankDocument.length, blankDocument.length);
+    });
   };
 
   const toggleStudioLight = () => {
@@ -397,12 +538,37 @@ export default function Home() {
     }
   };
 
-  const exportPdf = () => {
-    flash("Print dialog opened — choose “Save as PDF”.");
-    window.setTimeout(() => window.print(), 150);
+  const exportPdf = async () => {
+    if (isPdfExporting || !paperRef.current) return;
+    setIsPdfExporting(true);
+    flash("Building your PDF from the document preview…");
+    const paper = paperRef.current;
+    const previousZoom = paper.style.zoom;
+    paper.style.zoom = "1";
+    paper.classList.add("pdf-export-source");
+    try {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      const { default: html2pdf } = await import("html2pdf.js");
+      const scale = Math.min(2, 28000 / Math.max(paper.scrollHeight, 1));
+      await html2pdf().set({
+        margin: 0,
+        filename: filename.replace(/\.md$/i, "") + ".pdf",
+        image: { type: "jpeg", quality: 0.98 },
+        enableLinks: true,
+        html2canvas: { scale, useCORS: true, backgroundColor: theme.paper, logging: false, windowWidth: paper.scrollWidth },
+        jsPDF: { unit: "mm", format: pageSize, orientation: "portrait" },
+      }).from(paper).save();
+      flash("PDF downloaded.");
+    } catch {
+      flash("Couldn't build the PDF. Try a shorter document or export DOCX instead.");
+    } finally {
+      paper.classList.remove("pdf-export-source");
+      paper.style.zoom = previousZoom;
+      setIsPdfExporting(false);
+    }
   };
 
-  const exportDocx = async () => {
+  const buildDocx = async () => {
     flash("Building your professional Word document…");
     const {
       AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, ImageRun, PageBreak, PageNumber,
@@ -425,15 +591,19 @@ export default function Home() {
     });
 
     const logoData = logo ? Uint8Array.from(atob(logo.src.split(",")[1]), (char) => char.charCodeAt(0)) : null;
-    const logoImage = (targetHeight: number) => {
-      const height = Math.min(targetHeight, logo!.height);
-      const width = Math.round(logo!.width * (height / logo!.height));
+    const logoImage = (targetHeight: number, maxWidth: number) => {
+      let height = Math.min(Math.round(targetHeight * logoScale), logo!.height);
+      let width = Math.round(logo!.width * (height / logo!.height));
+      if (width > maxWidth) {
+        width = maxWidth;
+        height = Math.round(logo!.height * (width / logo!.width));
+      }
       return new ImageRun({ data: logoData!, transformation: { width, height }, type: logo!.format });
     };
     const coverLogo = Boolean(logo && logoOnCover);
 
     if (coverPage) {
-      if (coverLogo) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 700, after: 200 }, children: [logoImage(52)] }));
+      if (coverLogo) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 700, after: 200 }, children: [logoImage(52, 220)] }));
       children.push(
         new Paragraph({ text: organization.toUpperCase(), alignment: AlignmentType.CENTER, spacing: { before: coverLogo ? 200 : 900, after: 700 }, style: "CoverEyebrow" }),
         new Paragraph({ text: title, alignment: AlignmentType.CENTER, style: "CoverTitle", spacing: { after: 320 } }),
@@ -467,6 +637,13 @@ export default function Home() {
         children.push(new Paragraph({ children: [run(plainText(token), { italics: true, color: accent })], indent: { left: 420, right: 220 }, border: { left: { style: BorderStyle.SINGLE, size: 16, color: accent, space: 14 } }, shading: { type: ShadingType.CLEAR, fill: "F5F6F8" }, spacing: { before: 160, after: 200 } }));
       } else if (token.type === "list") {
         for (const item of token.items) children.push(new Paragraph({ children: [run(plainText(item))], bullet: token.ordered ? undefined : { level: 0 }, numbering: token.ordered ? { reference: "numbered-list", level: 0 } : undefined, spacing: { after: 90, line: 300 } }));
+      } else if (token.type === "code" && token.lang?.trim().toLowerCase() === "mermaid") {
+        try {
+          const image = await mermaidPng(await renderMermaidSvg(token.text, activeAccent, theme.ink));
+          children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ data: image.data, transformation: { width: image.width, height: image.height }, type: "png" })], spacing: { before: 180, after: 220 } }));
+        } catch {
+          children.push(new Paragraph({ children: [run(`Diagram source\n${token.text}`, { code: true })], shading: { type: ShadingType.CLEAR, fill: "F1F3F5" }, spacing: { before: 140, after: 200 } }));
+        }
       } else if (token.type === "code") {
         children.push(new Paragraph({ children: [run(token.text, { code: true })], shading: { type: ShadingType.CLEAR, fill: "F1F3F5" }, border: { left: { style: BorderStyle.SINGLE, size: 10, color: accent, space: 10 } }, spacing: { before: 140, after: 200 }, indent: { left: 180, right: 180 } }));
       } else if (token.type === "hr") {
@@ -509,8 +686,8 @@ export default function Home() {
       },
       sections: [{
         properties: { page: { size: page, margin: { top: margins, right: margins, bottom: margins, left: margins } } },
-        headers: showHeader ? { default: new Header({ children: [new Paragraph({ children: [...(logo && logoInHeader ? [logoImage(22), run("   ")] : []), run(`${organization}  /  ${title}`, { bold: true, color: "6C737A" })], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "D8DCE0", space: 6 } } })] }) } : undefined,
-        footers: showPageNumbers ? { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [...(logo && logoInFooter ? [logoImage(16), run("   ")] : []), run(`${classification}   •   Version ${version}   •   `, { color: "747A80" }), new TextRun({ children: [PageNumber.CURRENT], font: theme.wordFont, size: 18, color: "747A80" })] })] }) } : undefined,
+        headers: showHeader ? { default: new Header({ children: [new Paragraph({ children: [...(logo && logoInHeader ? [logoImage(22, 120), run("   ")] : []), run(`${organization}  /  ${title}`, { bold: true, color: "6C737A" })], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "D8DCE0", space: 6 } } })] }) } : undefined,
+        footers: showFooter ? { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [run(resolvedFooterText, { color: "747A80" }), ...(logo && logoInFooter ? [run("   "), logoImage(16, 90)] : []), ...(showPageNumbers ? [run("   •   ", { color: "747A80" }), new TextRun({ children: [PageNumber.CURRENT], font: theme.wordFont, size: 18, color: "747A80" })] : [])] })] }) } : undefined,
         children,
       }],
     });
@@ -523,6 +700,18 @@ export default function Home() {
     a.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     flash("Professional DOCX downloaded.");
+  };
+
+  const exportDocx = async () => {
+    if (isExporting) return;
+    setIsExporting(true);
+    try {
+      await buildDocx();
+    } catch {
+      flash("Couldn't build the DOCX. Check the document and try again.");
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const formatPanel = <aside className="inspector-pane format-pane">
@@ -553,15 +742,22 @@ export default function Home() {
   </aside>;
 
   const settingsPanel = <aside className="inspector-pane">
-    <div className="pane-label"><span>DOCUMENT SETUP</span><button onClick={() => setPanel(null)}>×</button></div>
+    <div className="pane-label"><span>COMPANY &amp; DOCUMENT</span><button onClick={() => setPanel(null)}>×</button></div>
     <div className="inspector-scroll">
+      <div className="setting-section"><b>Company setup</b>
+        <label>Organization<input value={organization} onChange={(e) => setOrganization(e.target.value)} /></label>
+        <label>Brand colour<div className="brand-color"><input aria-label="Brand colour" type="color" value={activeAccent} onChange={(e) => setAccentOverride(e.target.value)} /><button onClick={() => setAccentOverride("")}>Use theme colour</button></div></label>
+        <label>Company logo</label>
+        <div className="logo-row">{logo ? <><img src={logo.src} alt="Logo preview" /><button onClick={() => setLogo(null)}>Remove</button></> : <button onClick={() => logoRef.current?.click()}>Upload logo</button>}</div>
+        {logo && <div className="logo-placement">{[["Cover page", logoOnCover, setLogoOnCover], ["Header", logoInHeader, setLogoInHeader], ["Footer", logoInFooter, setLogoInFooter]].map(([label, value, setter]) => <button key={String(label)} className={value ? "selected" : ""} onClick={() => (setter as (value: boolean) => void)(!value)}>{String(label)}</button>)}</div>}
+        {logo && <label>Logo size<div className="segmented three">{(["small", "standard", "large"] as LogoSize[]).map((size) => <button key={size} className={logoSize === size ? "selected" : ""} onClick={() => setLogoSize(size)}>{size[0].toUpperCase() + size.slice(1)}</button>)}</div></label>}
+        <label>Footer text<input value={footerText} placeholder={`${organization} · ${classification}`} onChange={(e) => setFooterText(e.target.value)} /></label>
+        <div className="brand-actions"><button onClick={saveBrandKit}>Save company style</button><button onClick={forgetBrandKit}>Forget saved</button></div>
+        <p className="brand-note">Saved only in this browser. Logos must be under 2 MB.</p>
+      </div>
       <div className="setting-section"><b>Document identity</b>
         <label>Title<input value={title} onChange={(e) => setTitle(e.target.value)} /></label>
         <label>Author<input value={author} onChange={(e) => setAuthor(e.target.value)} /></label>
-        <label>Organization<input value={organization} onChange={(e) => setOrganization(e.target.value)} /></label>
-        <label>Company logo</label>
-        <div className="logo-row">{logo ? <><img src={logo.src} alt="Logo preview" /><button onClick={() => setLogo(null)}>Remove</button></> : <button onClick={() => logoRef.current?.click()}>Upload logo (PNG / JPG)</button>}</div>
-        {logo && <div className="logo-placement">{[["Cover page", logoOnCover, setLogoOnCover], ["Header", logoInHeader, setLogoInHeader], ["Footer", logoInFooter, setLogoInFooter]].map(([label, value, setter]) => <button key={String(label)} className={value ? "selected" : ""} onClick={() => (setter as (value: boolean) => void)(!value)}>{String(label)}</button>)}</div>}
         <div className="field-row"><label>Version<input value={version} onChange={(e) => setVersion(e.target.value)} /></label><label>Classification<input value={classification} onChange={(e) => setClassification(e.target.value)} /></label></div>
       </div>
       <div className="setting-section"><b>Page setup</b>
@@ -569,7 +765,7 @@ export default function Home() {
         <label>Margins<select value={marginSize} onChange={(e) => setMarginSize(e.target.value as MarginSize)}><option value="narrow">Narrow</option><option value="normal">Professional</option><option value="wide">Wide</option></select></label>
       </div>
       <div className="setting-section"><b>Document structure</b>
-        {[["Cover page", coverPage, setCoverPage], ["Table of contents", tableOfContents, setTableOfContents], ["Numbered heading style", numberedHeadings, setNumberedHeadings], ["Running header", showHeader, setShowHeader], ["Page numbers", showPageNumbers, setShowPageNumbers]].map(([label, value, setter]) => <label className="toggle" key={String(label)}><span>{String(label)}</span><input type="checkbox" checked={value as boolean} onChange={(e) => (setter as (value: boolean) => void)(e.target.checked)} /></label>)}
+        {[["Cover page", coverPage, setCoverPage], ["Table of contents", tableOfContents, setTableOfContents], ["Numbered heading style", numberedHeadings, setNumberedHeadings], ["Running header", showHeader, setShowHeader], ["Footer", showFooter, setShowFooter], ["Page numbers", showPageNumbers, setShowPageNumbers]].map(([label, value, setter]) => <label className="toggle" key={String(label)}><span>{String(label)}</span><input type="checkbox" checked={value as boolean} onChange={(e) => (setter as (value: boolean) => void)(e.target.checked)} /></label>)}
       </div>
       <p className="setting-note">These settings are applied to the PDF preview and professional DOCX export.</p>
     </div>
@@ -596,17 +792,28 @@ export default function Home() {
       <nav className="nav shell">
         <a className="brand" href="#top" aria-label="unmarkdown.in home"><span className="brand-mark" aria-hidden="true">M<i>↓</i></span><span className="brand-name">unmarkdown<em>.in</em></span></a>
         <div className="nav-links"><a href="#idea">The idea</a><a href="#features">Features</a><a href="#templates">Standards</a><a href="#studio">Studio</a></div>
-        <button className="nav-cta" onClick={() => fileRef.current?.click()}>Upload Markdown <span>↗</span></button>
+        <a className="nav-cta" href="#studio">Open Studio <span>↓</span></a>
       </nav>
 
       <section className="hero shell" id="top" ref={heroRef} onMouseMove={heroMove}>
         <div className="eyebrow"><span /> The missing step after your AI chat</div>
         <h1>AI writes Markdown.<br/><em>unmarkdown.in makes it official.</em></h1>
         <p className="hero-copy">Asking an AI to generate a Word file burns tokens on formatting instead of thinking. Markdown is what models write best — fast, cheap, clean. Bring that Markdown here and leave with a boardroom-ready DOCX or PDF.</p>
-        <div className="hero-actions"><button className="primary" onClick={() => fileRef.current?.click()}>Upload a .md file <span>→</span></button><a className="secondary" href="#studio">Explore the studio</a></div>
+        <div className="hero-actions">
+          <div
+            className={`hero-upload ${dropActive ? "dragging" : ""}`}
+            onDragOver={(e) => { e.preventDefault(); setDropActive(true); }}
+            onDragLeave={() => setDropActive(false)}
+            onDrop={(e) => { e.preventDefault(); setDropActive(false); openFile(e.dataTransfer.files?.[0]); }}
+          >
+            <button className="primary" onClick={() => fileRef.current?.click()}>Choose .md file <span>↑</span></button>
+            <div><b>or drop your Markdown here</b><small>Private in your browser · up to 5 MB</small></div>
+          </div>
+          <a className="secondary" href="#studio">Explore the studio</a>
+        </div>
         <p className="privacy"><span>✓</span> Private by design — your Markdown never leaves your browser</p>
         <ol className="hero-flow" aria-label="How unmarkdown.in works">
-          <li><span>01</span><b>Ask your AI for Markdown</b><small>"Give me the report as .md" — a fraction of the tokens a DOCX skill costs</small></li>
+          <li><span>01</span><b>Ask your AI for Markdown</b><small>&ldquo;Give me the report as .md&rdquo; — a fraction of the tokens a DOCX skill costs</small></li>
           <li className="flow-arrow" aria-hidden="true">→</li>
           <li><span>02</span><b>Drop it into unmarkdown.in</b><small>Choose the right document standard and preview the polished result instantly</small></li>
           <li className="flow-arrow" aria-hidden="true">→</li>
@@ -634,7 +841,7 @@ export default function Home() {
         </div>
         <div className="chat-side">
           <div className="standard-chips" role="tablist" aria-label="Choose a document standard for the prompt">
-            {(Object.keys(themes) as ThemeKey[]).map((key) => <button key={key} role="tab" aria-selected={themeKey === key} className={themeKey === key ? "selected" : ""} onClick={() => { setThemeKey(key); setAccentOverride(""); }}>{themes[key].label}</button>)}
+            {(Object.keys(themes) as ThemeKey[]).map((key) => <button key={key} role="tab" aria-selected={themeKey === key} className={themeKey === key ? "selected" : ""} onClick={() => setThemeKey(key)}>{themes[key].label}</button>)}
           </div>
           <div className="chat-mock tilt-card" onMouseMove={tilt} onMouseLeave={untilt}>
             <div className="chat-title"><i/><i/><i/><span>Any AI chat — ChatGPT, Claude, Gemini…</span></div>
@@ -659,13 +866,19 @@ export default function Home() {
           <div className="studio-bar">
             <div className="file-name"><span className="file-mark">MD</span><div><b>{filename}</b><small>{themes[themeKey].label} · {pageSize.toUpperCase()}</small></div></div>
             <div className="bar-tools">
-              <button onClick={() => fileRef.current?.click()}>＋ Upload .md</button>
               <button className={panel === "format" ? "active" : ""} onClick={() => setPanel(panel === "format" ? null : "format")}>⊞ Format</button>
-              <button className={panel === "settings" ? "active" : ""} onClick={() => setPanel(panel === "settings" ? null : "settings")}>⚙ Document setup</button>
+              <button className={panel === "settings" ? "active" : ""} onClick={() => setPanel(panel === "settings" ? null : "settings")}>⚙ Company &amp; document</button>
               <button className={panel === "css" ? "active" : ""} onClick={() => setPanel(panel === "css" ? null : "css")}>✦ Style Lab</button>
-              <span className="divider"/><button onClick={exportPdf}>↓ PDF</button><button className="export" onClick={exportDocx}>↓ Professional DOCX</button>
+              <span className="divider"/><button disabled={isPdfExporting} onClick={exportPdf}>{isPdfExporting ? "Building PDF…" : "↓ PDF"}</button><button className="export" disabled={isExporting} onClick={exportDocx}>{isExporting ? "Building DOCX…" : "↓ Professional DOCX"}</button>
             </div>
           </div>
+          {showStart && <div className="studio-start" role="region" aria-label="Start a document">
+            <div><small>TRY THE STUDIO</small><b>Start fresh or explore a ready-made document</b></div>
+            <div className="studio-start-actions">
+              <button onClick={startWriting}>✎ Start writing</button>
+              <button onClick={() => { setShowStart(false); editorRef.current?.focus(); }}>↺ Explore sample</button>
+            </div>
+          </div>}
           <div className="workspace">
             <section
               className={`editor-pane ${dropActive ? "drop-active" : ""}`}
@@ -689,17 +902,18 @@ export default function Home() {
                 <span className="tool-sep" aria-hidden="true"/>
                 <button title="Table" onClick={() => insertBlock("| Column | Column | Column |\n| --- | --- | --- |\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |")}>▦ Table</button>
                 <button title="Code block" onClick={() => insertBlock("```\ncode here\n```")}>Code</button>
+                <button title="Insert flowchart diagram" onClick={() => insertBlock("```mermaid\nflowchart LR\n  A[Start] --> B[Review]\n  B --> C[Export]\n```")}>◇ Diagram</button>
                 <button title="Link" onClick={() => wrapSelection("[", "](https://example.com)", "link text")}>↗ Link</button>
                 <button title="Horizontal rule" onClick={() => insertBlock("---")}>— Rule</button>
               </div>
-              <textarea ref={editorRef} aria-label="Markdown editor" value={markdown} onChange={(e) => { userEditedRef.current = true; setMarkdown(e.target.value); }} spellCheck="false" />
+              <textarea ref={editorRef} aria-label="Markdown editor" value={markdown} onChange={(e) => { userEditedRef.current = true; setShowStart(false); setMarkdown(e.target.value); }} spellCheck="false" />
               {dropActive && <div className="drop-hint">Drop your .md file to load it</div>}
             </section>
             <section className="preview-pane">
               <div className="pane-label preview-toolbar"><span>DOCUMENT PREVIEW · {pageSize.toUpperCase()}</span><div className="preview-actions"><button aria-label="Zoom out" onClick={() => setZoom(Math.max(40, zoom - 10))}>−</button><span>{zoom}%</span><button aria-label="Zoom in" onClick={() => setZoom(Math.min(125, zoom + 10))}>＋</button><button className="fit-button" onClick={fitPreview}>Fit</button><span className={`live ${isRendering ? "busy" : ""}`}><i/> {isRendering ? "Rendering…" : "Live"}</span></div></div>
               <div className="preview-scroll" ref={previewRef} tabIndex={0} aria-label="Scrollable document preview">
                 <div className="page-stage">
-                  <div key={`${themeKey}-${pageSize}-${marginSize}`} className={`paper document-shell page-${pageSize} margin-${marginSize}`} style={{ "--accent": activeAccent, "--ink": theme.ink, "--paper": theme.paper, "--doc-font": theme.font, "--page-padding": padding, "--body-size": `${bodySize}px`, "--line-height": lineHeight, zoom: zoom / 100 } as React.CSSProperties}>
+                  <div ref={paperRef} key={`${themeKey}-${pageSize}-${marginSize}`} className={`paper document-shell page-${pageSize} margin-${marginSize}`} style={{ "--accent": activeAccent, "--ink": theme.ink, "--paper": theme.paper, "--doc-font": theme.font, "--page-padding": padding, "--body-size": `${bodySize}px`, "--line-height": lineHeight, "--logo-scale": logoScale, zoom: zoom / 100 } as React.CSSProperties}>
                     {showHeader && <div className="paper-header"><span className="header-brand">{logo && logoInHeader && <img src={logo.src} alt="" />}{organization}</span><span>{classification} · V{version}</span></div>}
                     {coverPage && <section className="cover-preview">
                       <button className="cover-remove" title="Remove the cover page (re-enable in Document setup)" onClick={() => { setCoverPage(false); flash("Cover removed — re-enable it in Document setup."); }}>× Remove cover</button>
@@ -715,7 +929,7 @@ export default function Home() {
                       <em className="cover-hint">Click any line to edit</em>
                     </section>}
                     <article className={`document-preview theme-${themeKey} ${numberedHeadings ? "numbered-headings" : ""}`} dangerouslySetInnerHTML={{ __html: html }} />
-                    {showPageNumbers && <div className="paper-footer"><span>{filename}</span>{logo && logoInFooter && <img className="footer-logo" src={logo.src} alt="" />}<span>01</span></div>}
+                    {showFooter && <div className="paper-footer"><span>{resolvedFooterText}</span>{logo && logoInFooter && <img className="footer-logo" src={logo.src} alt="" />}{showPageNumbers && <span>01</span>}</div>}
                   </div>
                 </div>
               </div>
@@ -759,10 +973,18 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="shell"><a className="brand" href="#top" aria-label="unmarkdown.in home"><span className="brand-mark" aria-hidden="true">M<i>↓</i></span><span className="brand-name">unmarkdown<em>.in</em></span></a><p>Professional documents from one Markdown file.</p><small>Private · precise · publication ready</small></footer>
+      <footer className="shell">
+        <a className="brand" href="#top" aria-label="unmarkdown.in home"><span className="brand-mark" aria-hidden="true">M<i>↓</i></span><span className="brand-name">unmarkdown<em>.in</em></span></a>
+        <p>Professional documents from one Markdown file.</p>
+        <div className="footer-contact">
+          <span>Developed by <b>Sainath K</b></span>
+          <a href="mailto:aichroniclesmedia@gmail.com">aichroniclesmedia@gmail.com</a>
+          <a href="tel:+916309780970">+91 63097 80970</a>
+        </div>
+      </footer>
       <input ref={fileRef} className="sr-only" type="file" accept=".md,text/markdown,text/plain" onChange={(e) => openFile(e.target.files?.[0])}/>
       <input ref={logoRef} className="sr-only" type="file" accept="image/png,image/jpeg,image/gif,image/bmp" onChange={(e) => { openLogo(e.target.files?.[0]); e.target.value = ""; }}/>
-      <style>{`${customCss}\n@media print { @page { size: ${pageSize === "a4" ? "A4" : "Letter"}; } }`}</style>
+      <style>{`${customCss}\n@media print { @page { size: ${pageSize === "a4" ? "A4" : "Letter"}; margin: ${padding}; } }`}</style>
       {notice && <div className="toast" role="status">{notice}</div>}
     </main>
   );
