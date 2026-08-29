@@ -589,7 +589,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* Search landing pages */
 .seo-page { min-height: 100vh; background: #f7f3ec; color: #241f1b; }
-.seo-nav { position: sticky; top: 0; z-index: 20; height: 84px; display: flex; align-items: center; justify-content: space-between; background: #f7f3ec; border-bottom: 1px solid #ddd5cc; }
+.seo-nav { position: relative; z-index: 2; height: 84px; display: flex; align-items: center; justify-content: space-between; background: #f7f3ec; border-bottom: 1px solid #ddd5cc; }
 .seo-nav > div { display: flex; align-items: center; gap: 30px; }
 .seo-nav > div > a { color: #5d554e; font-size: 14px; text-decoration: none; }
 .seo-nav > div > a:hover { color: #241f1b; }

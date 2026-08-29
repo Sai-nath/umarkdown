@@ -50,6 +50,7 @@ test("keeps long previews on a readable paper canvas", async () => {
   assert.doesNotMatch(css, /overscroll-behavior:\s*contain/);
   assert.match(css, /print-color-adjust: exact/);
   assert.match(css, /\.studio, \.shell-wide \{ width: 100%/);
+  assert.doesNotMatch(css, /\.seo-nav \{[^}]*position:\s*sticky/);
 });
 
 test("renders unique indexable landing pages with FAQs and internal links", async () => {
