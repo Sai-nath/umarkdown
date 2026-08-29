@@ -70,6 +70,9 @@ test("renders unique indexable landing pages with FAQs and internal links", asyn
     assert.match(html, new RegExp(`<link rel="canonical" href="https://www\\.unmarkdown\\.in${path}"`));
     assert.match(html, /FAQPage/);
     assert.match(html, /SoftwareApplication/);
+    assert.match(html, /studio-current\.png/);
+    assert.match(html, /Upload Markdown/);
+    assert.match(html, /Export DOCX or PDF/);
     assert.match(html, /Explore related Markdown tools and templates/);
   }
 });

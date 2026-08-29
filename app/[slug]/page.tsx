@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { seoPageList, seoPages, siteUrl } from "../seo-pages";
@@ -60,17 +59,22 @@ export default async function SeoLandingPage({ params }: Props) {
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, "\\u003c") }} />
     <nav className="seo-nav shell" aria-label="Main navigation">
       <Link className="brand" href="/" aria-label="unmarkdown.in home"><span className="brand-mark" aria-hidden="true">M<i>↓</i></span><span className="brand-name">unmarkdown<em>.in</em></span></Link>
-      <div><Link href="/#features">Features</Link><Link href="/#templates">Standards</Link><Link className="seo-nav-cta" href="/#top">Open converter</Link></div>
+      <div><Link href="/#features">Features</Link><Link href="/#templates">Standards</Link><Link className="seo-nav-cta" href="/#studio">Open studio</Link></div>
     </nav>
 
     <header className="seo-hero">
-      <div className="seo-hero-media"><Image src="/og-v3.png" alt="Unmarkdown document studio preview" fill sizes="100vw" priority /></div>
+      <div className="seo-hero-media" role="img" aria-label="Unmarkdown studio with Markdown editor and live professional document preview" style={{ backgroundImage: "url('/studio-current.png')" }} />
       <div className="seo-hero-inner shell">
-        <span>{page.eyebrow}</span>
+        <span><i aria-hidden="true" /> {page.eyebrow}</span>
         <h1>{page.h1}</h1>
         <p>{page.lede}</p>
-        <div className="seo-hero-actions"><Link href="/#top">Use the converter <b>→</b></Link><Link href="/#studio">See the document studio</Link></div>
-        <small>Free to use · No sign-up · Files stay in your browser</small>
+        <div className="seo-hero-actions"><Link href="/#studio">Start in the document studio <b>→</b></Link><Link href="/#templates">Browse document standards</Link></div>
+        <ol className="seo-hero-flow" aria-label="How Unmarkdown works">
+          <li><b>01</b><span>Upload Markdown</span></li>
+          <li><b>02</b><span>Pick a standard</span></li>
+          <li><b>03</b><span>Export DOCX or PDF</span></li>
+        </ol>
+        <small>Free · No sign-up · Your document stays in your browser</small>
       </div>
     </header>
 
