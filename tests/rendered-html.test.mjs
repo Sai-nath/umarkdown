@@ -118,6 +118,14 @@ test("detects legal Markdown and exposes unrestricted styling", async () => {
   assert.match(page, /pdf_export/);
   assert.match(page, /docx_export/);
   assert.match(page, /\/markdown-to-word/);
+  assert.match(page, /OUTPUT CONTRACT/);
+  assert.match(page, /MARKDOWN TOOLKIT/);
+  assert.match(page, /FINAL QUALITY CHECK/);
+  assert.match(page, /fenced `mermaid` block/);
+  assert.match(page, /\[TBD: specific information needed\]/);
+  assert.match(page, /traceability table/);
+  assert.match(page, /ADR table/);
+  assert.match(page, /Cite only sources supplied/);
   assert.doesNotMatch(page, /window\.print/);
   assert.doesNotMatch(page, /＋ Upload \.md|↑ Upload \.md/);
   assert.ok(page.indexOf("technical specification") < page.indexOf("/privacy|terms|policy|agreement|legal|cookie/"));

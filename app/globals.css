@@ -488,7 +488,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .bubble small { display: block; margin-bottom: 7px; font: 700 8px Arial, sans-serif; letter-spacing: .16em; text-transform: uppercase; }
 .bubble.user { margin-left: auto; background: var(--ink); color: #f2ede6; border-bottom-right-radius: 3px; box-shadow: 0 16px 36px #29242126; }
 .bubble.user small { color: #d69ab2; }
-.bubble.user p { margin: 0; font: 11.5px/1.7 Georgia, serif; }
+.bubble.user p { max-height: 250px; margin: 0; padding-right: 8px; overflow: auto; white-space: pre-wrap; scrollbar-color: #6b5e59 #292421; font: 11.5px/1.7 Georgia, serif; }
 .bubble.ai { background: #f3efe7; border: 1px solid #e7e0d4; border-bottom-left-radius: 3px; }
 .bubble.ai small { color: #9a928b; }
 .bubble.ai pre { margin: 0; font: 10.5px/1.75 ui-monospace, SFMono-Regular, Menlo, monospace; color: #4c463f; white-space: pre-wrap; }
