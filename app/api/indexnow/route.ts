@@ -16,7 +16,7 @@ export async function POST() {
   const response = await fetch("https://api.indexnow.org/indexnow", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ host: "www.unmarkdown.in", key, keyLocation: `${siteUrl}/api/indexnow`, urlList }),
+    body: JSON.stringify({ host: "www.unmarkdown.in", key, keyLocation: `${siteUrl}/${key}.txt`, urlList }),
   });
   return Response.json({ submitted: response.ok, status: response.status, urls: urlList.length }, { status: response.ok ? 200 : 502 });
 }

@@ -84,6 +84,10 @@ test("publishes every landing page in the sitemap and exposes the IndexNow key",
   const key = await render("/api/indexnow");
   assert.equal(key.status, 200);
   assert.match(await key.text(), /^[a-f0-9]{32}$/);
+  const indexNowRoute = await readFile(new URL("../app/api/indexnow/route.ts", import.meta.url), "utf8");
+  assert.match(indexNowRoute, /\$\{siteUrl\}\/\$\{key\}\.txt/);
+  const keyFile = await readFile(new URL("../public/bf1d94f0e625ceac4d1d0b5032ce05cb.txt", import.meta.url), "utf8");
+  assert.match(keyFile.trim(), /^[a-f0-9]{32}$/);
 });
 
 test("detects legal Markdown and exposes unrestricted styling", async () => {
