@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { seoPageList, seoPages, siteUrl } from "../seo-pages";
+import PromptCard from "./prompt-card";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -83,6 +84,8 @@ export default async function SeoLandingPage({ params }: Props) {
       <h2>{page.problemHeading}</h2>
       <p>{page.problem}</p>
     </section>
+
+    {page.prompt && <PromptCard label={page.prompt.label} heading={page.prompt.heading} intro={page.prompt.intro} prompt={page.prompt.text} />}
 
     <section className="seo-benefits">
       <div className="shell">

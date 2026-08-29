@@ -96,6 +96,20 @@ test("publishes every landing page in the sitemap and exposes the IndexNow key",
   assert.match(keyFile.trim(), /^[a-f0-9]{32}$/);
 });
 
+test("keeps useful AI prompts on the SRS and architecture pages", async () => {
+  const srs = await (await render("/srs-document-generator")).text();
+  assert.match(srs, /Copy complete prompt/);
+  assert.match(srs, /FR-001/);
+  assert.match(srs, /traceability table/);
+  assert.match(srs, /Do not invent business rules/);
+
+  const architecture = await (await render("/architecture-document-template")).text();
+  assert.match(architecture, /Copy complete prompt/);
+  assert.match(architecture, /ADR-001/);
+  assert.match(architecture, /Mermaid diagrams/);
+  assert.match(architecture, /Do not invent services/);
+});
+
 test("detects legal Markdown and exposes unrestricted styling", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /privacy policy\|terms/);

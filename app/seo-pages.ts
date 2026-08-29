@@ -10,6 +10,7 @@ export type SeoPage = {
   benefits: Array<{ title: string; text: string }>;
   steps: Array<{ title: string; text: string }>;
   faq: Array<{ question: string; answer: string }>;
+  prompt?: { label: string; heading: string; intro: string; text: string };
 };
 
 export const siteUrl = "https://www.unmarkdown.in";
@@ -144,6 +145,34 @@ export const seoPages: Record<string, SeoPage> = {
       { question: "Can I use an AI assistant to draft the SRS?", answer: "Yes. Ask the assistant for a complete SRS in Markdown, review the content, then format and export it with Unmarkdown." },
       { question: "Is the generated SRS editable in Word?", answer: "Yes. The DOCX export uses editable native Word elements." },
     ],
+    prompt: {
+      label: "SRS AI PROMPT",
+      heading: "Turn project notes into a complete, testable SRS",
+      intro: "Paste this prompt into ChatGPT, Claude, Gemini or another AI assistant with your project context. It requests clean Markdown that is ready for review and professional export.",
+      text: [
+        "Create a complete, review-ready Software Requirements Specification as raw GitHub-Flavored Markdown (.md). Return only the finished Markdown document with no preamble and no code fence around the response.",
+        "",
+        "Use exactly one # H1 title, then sequential ## and ### headings. Do not invent business rules, integrations, metrics or performance targets. Mark missing input as [TBD: specific decision or evidence needed].",
+        "",
+        "Include:",
+        "- A metadata table: Project | Owner | Version | Status | Date | Approvers",
+        "- 1. Introduction: purpose, scope, intended audience and definitions",
+        "- 2. System Overview: users, context, assumptions, dependencies and constraints",
+        "- 3. Interfaces: user, software, hardware and communication interfaces",
+        "- 4. Functional Requirements",
+        "- 5. Non-Functional Requirements: security, privacy, accessibility, performance, availability, scalability, observability and compliance",
+        "- 6. Data Requirements: entities, validation, retention, migration and audit needs",
+        "- 7. Acceptance Criteria and Verification",
+        "- 8. Risks, Open Questions and Approvals",
+        "",
+        "Write every requirement as an unambiguous shall statement. Use unique IDs and this table:",
+        "| ID | Requirement | Rationale | Priority | Verification |",
+        "| --- | --- | --- | --- | --- |",
+        "| FR-001 | The system shall ... | ... | Must | Test |",
+        "",
+        "Use FR-### for functional requirements and NFR-### for non-functional requirements. Add a focused Mermaid context or workflow diagram when it improves understanding. End with a traceability table linking requirement IDs to acceptance tests. Verify unique IDs, testability, heading order and table consistency before returning the document.",
+      ].join("\n"),
+    },
   },
   "architecture-document-template": {
     slug: "architecture-document-template",
@@ -170,6 +199,38 @@ export const seoPages: Record<string, SeoPage> = {
       { question: "Can the architecture document use company branding?", answer: "Yes. Add a logo, brand colour, organization name and footer before export." },
       { question: "Can I export the template to Word?", answer: "Yes. Export DOCX for collaborative editing or PDF for a stable review copy." },
     ],
+    prompt: {
+      label: "ARCHITECTURE AI PROMPT",
+      heading: "Create an architecture document that explains the decisions",
+      intro: "Give your AI assistant the system context, constraints and known decisions with this prompt. The result stays technical, traceable and ready for diagrams, DOCX or PDF.",
+      text: [
+        "Create a practical software architecture document as raw GitHub-Flavored Markdown (.md). Return only the finished Markdown document with no preamble and no code fence around the response.",
+        "",
+        "Use exactly one # H1 title, then sequential ## and ### headings. Do not invent services, technologies, scale figures, SLAs, security controls or decisions. Mark missing information as [TBD: specific evidence or decision needed] and state assumptions explicitly.",
+        "",
+        "Include:",
+        "- A metadata table: System | Owner | Version | Status | Date | Reviewers",
+        "- 1. Executive Overview and architecture goals",
+        "- 2. Scope, non-goals, stakeholders and system context",
+        "- 3. Architecture drivers: constraints and quality attributes",
+        "- 4. Component responsibilities and boundaries",
+        "- 5. Interfaces, APIs, events and external dependencies",
+        "- 6. Data model, ownership, lifecycle and flows",
+        "- 7. Security, privacy and trust boundaries",
+        "- 8. Deployment, environments, scalability and resilience",
+        "- 9. Observability, operations and failure handling",
+        "- 10. Risks, technical debt, open questions and roadmap",
+        "",
+        "Add focused Mermaid diagrams where useful: system context, components, sequence, data flow or deployment. Keep every diagram syntactically valid and explain it in the surrounding text.",
+        "",
+        "Record decisions in this ADR table:",
+        "| ID | Decision | Status | Rationale | Alternatives | Trade-offs |",
+        "| --- | --- | --- | --- | --- | --- |",
+        "| ADR-001 | ... | Proposed | ... | ... | ... |",
+        "",
+        "Use language-tagged code blocks only for real interface or configuration examples. Verify diagram names, component terminology, ADR IDs, assumptions, heading order and internal consistency before returning the document.",
+      ].join("\n"),
+    },
   },
 };
 
