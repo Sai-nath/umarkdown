@@ -326,8 +326,10 @@ export default function Home() {
   const [showStart, setShowStart] = useState(true);
   const [isPdfExporting, setIsPdfExporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [docxPreviewOpen, setDocxPreviewOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const logoRef = useRef<HTMLInputElement>(null);
+  const previewTriggerRef = useRef<HTMLButtonElement>(null);
   const heroRef = useRef<HTMLElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -370,6 +372,26 @@ export default function Home() {
     }, 120);
     return () => window.clearTimeout(id);
   }, []);
+
+  useEffect(() => {
+    if (!docxPreviewOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setDocxPreviewOpen(false);
+      window.setTimeout(() => previewTriggerRef.current?.focus(), 0);
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    window.setTimeout(() => {
+      previewRef.current?.scrollTo({ top: 0 });
+      previewRef.current?.focus();
+    }, 0);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [docxPreviewOpen]);
   const theme = themes[themeKey];
   const activeAccent = accentOverride || theme.accent;
   const logoScale = logoSize === "small" ? 0.72 : logoSize === "large" ? 1.3 : 1;
@@ -801,6 +823,17 @@ export default function Home() {
     }
   };
 
+  const openDocxPreview = () => {
+    setPanel(null);
+    setDocxPreviewOpen(true);
+    trackAnalytics("docx_preview", { selected_standard: themeKey, page_size: pageSize });
+  };
+
+  const closeDocxPreview = () => {
+    setDocxPreviewOpen(false);
+    window.setTimeout(() => previewTriggerRef.current?.focus(), 0);
+  };
+
   const formatPanel = <aside className="inspector-pane format-pane">
     <div className="pane-label"><span>DOCUMENT FORMAT</span><button onClick={() => setPanel(null)}>×</button></div>
     <div className="inspector-scroll">
@@ -956,7 +989,7 @@ export default function Home() {
               <button className={panel === "format" ? "active" : ""} onClick={() => setPanel(panel === "format" ? null : "format")}>⊞ Format</button>
               <button className={panel === "settings" ? "active" : ""} onClick={() => setPanel(panel === "settings" ? null : "settings")}>⚙ Company &amp; document</button>
               <button className={panel === "css" ? "active" : ""} onClick={() => setPanel(panel === "css" ? null : "css")}>✦ Style Lab</button>
-              <span className="divider"/><button disabled={isPdfExporting} onClick={exportPdf}>{isPdfExporting ? "Building PDF…" : "↓ PDF"}</button><button className="export" disabled={isExporting} onClick={exportDocx}>{isExporting ? "Building DOCX…" : "↓ Professional DOCX"}</button>
+              <span className="divider"/><button ref={previewTriggerRef} onClick={openDocxPreview}>▣ Preview DOCX</button><button disabled={isPdfExporting} onClick={exportPdf}>{isPdfExporting ? "Building PDF…" : "↓ PDF"}</button><button className="export" disabled={isExporting} onClick={exportDocx}>{isExporting ? "Building DOCX…" : "↓ Professional DOCX"}</button>
             </div>
           </div>
           {showStart && <div className="studio-start" role="region" aria-label="Start a document">
@@ -996,8 +1029,8 @@ export default function Home() {
               <textarea ref={editorRef} aria-label="Markdown editor" value={markdown} onChange={(e) => { userEditedRef.current = true; setShowStart(false); setMarkdown(e.target.value); }} spellCheck="false" />
               {dropActive && <div className="drop-hint">Drop your .md file to load it</div>}
             </section>
-            <section className="preview-pane">
-              <div className="pane-label preview-toolbar"><span>DOCUMENT PREVIEW · {pageSize.toUpperCase()}</span><div className="preview-actions"><button aria-label="Zoom out" onClick={() => setZoom(Math.max(40, zoom - 10))}>−</button><span>{zoom}%</span><button aria-label="Zoom in" onClick={() => setZoom(Math.min(125, zoom + 10))}>＋</button><button className="fit-button" onClick={fitPreview}>Fit</button><span className={`live ${isRendering ? "busy" : ""}`}><i/> {isRendering ? "Rendering…" : "Live"}</span></div></div>
+            <section className={`preview-pane ${docxPreviewOpen ? "docx-preview-fullscreen" : ""}`} role={docxPreviewOpen ? "dialog" : undefined} aria-modal={docxPreviewOpen || undefined} aria-label={docxPreviewOpen ? "Full-screen DOCX preview" : undefined}>
+              <div className="pane-label preview-toolbar"><span>{docxPreviewOpen ? "DOCX LAYOUT PREVIEW" : "DOCUMENT PREVIEW"} · {pageSize.toUpperCase()}</span><div className="preview-actions"><button aria-label="Zoom out" onClick={() => setZoom(Math.max(40, zoom - 10))}>−</button><span>{zoom}%</span><button aria-label="Zoom in" onClick={() => setZoom(Math.min(125, zoom + 10))}>＋</button><button className="fit-button" onClick={fitPreview}>Fit</button><span className={`live ${isRendering ? "busy" : ""}`}><i/> {isRendering ? "Rendering…" : "Live"}</span>{docxPreviewOpen && <button className="preview-close" aria-label="Close DOCX preview" onClick={closeDocxPreview}>× Close</button>}</div></div>
               <div className="preview-scroll" ref={previewRef} tabIndex={0} aria-label="Scrollable document preview">
                 <div className="page-stage">
                   <div ref={paperRef} key={`${themeKey}-${pageSize}-${marginSize}`} className={`paper document-shell page-${pageSize} margin-${marginSize}`} style={{ "--accent": activeAccent, "--ink": theme.ink, "--paper": theme.paper, "--doc-font": theme.font, "--page-padding": padding, "--body-size": `${bodySize}px`, "--line-height": lineHeight, "--logo-scale": logoScale, zoom: zoom / 100 } as React.CSSProperties}>
@@ -1006,12 +1039,12 @@ export default function Home() {
                       <button className="cover-remove" title="Remove the cover page (re-enable in Document setup)" onClick={() => { setCoverPage(false); flash("Cover removed — re-enable it in Document setup."); }}>× Remove cover</button>
                       {logo && logoOnCover && <div className="cover-logo"><img src={logo.src} alt={`${organization} logo`} /><button title="Remove logo from cover" onClick={() => setLogoOnCover(false)}>×</button></div>}
                       {!logo && <button className="logo-add" onClick={() => logoRef.current?.click()}>+ Add company logo</button>}
-                      <small contentEditable suppressContentEditableWarning spellCheck={false} onBlur={(e) => setOrganization(e.currentTarget.textContent?.trim() || organization)}>{organization}</small>
-                      <h1 contentEditable suppressContentEditableWarning spellCheck={false} onBlur={(e) => setTitle(e.currentTarget.textContent?.trim() || title)}>{title}</h1>
+                      <small contentEditable={!docxPreviewOpen} suppressContentEditableWarning spellCheck={false} onBlur={(e) => setOrganization(e.currentTarget.textContent?.trim() || organization)}>{organization}</small>
+                      <h1 contentEditable={!docxPreviewOpen} suppressContentEditableWarning spellCheck={false} onBlur={(e) => setTitle(e.currentTarget.textContent?.trim() || title)}>{title}</h1>
                       <p>{themes[themeKey].category}</p>
                       <div>
-                        <span contentEditable suppressContentEditableWarning spellCheck={false} onBlur={(e) => setAuthor(e.currentTarget.textContent?.trim() || author)}>{author}</span>
-                        <span>Version <span contentEditable suppressContentEditableWarning spellCheck={false} onBlur={(e) => setVersion(e.currentTarget.textContent?.trim() || version)}>{version}</span></span>
+                        <span contentEditable={!docxPreviewOpen} suppressContentEditableWarning spellCheck={false} onBlur={(e) => setAuthor(e.currentTarget.textContent?.trim() || author)}>{author}</span>
+                        <span>Version <span contentEditable={!docxPreviewOpen} suppressContentEditableWarning spellCheck={false} onBlur={(e) => setVersion(e.currentTarget.textContent?.trim() || version)}>{version}</span></span>
                       </div>
                       <em className="cover-hint">Click any line to edit</em>
                     </section>}

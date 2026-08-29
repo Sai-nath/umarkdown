@@ -30,6 +30,7 @@ test("renders the unmarkdown.in Markdown converter", async () => {
   assert.match(html, /Zoom in/);
   assert.match(html, /↓ PDF/);
   assert.match(html, /Professional DOCX/);
+  assert.match(html, /Preview DOCX/);
   assert.match(html, /or drop your Markdown here/);
   assert.match(html, /Start fresh or explore a ready-made document/);
   assert.match(html, /Start writing/);
@@ -46,6 +47,7 @@ test("keeps long previews on a readable paper canvas", async () => {
   assert.match(css, /\.page-letter \{ width: 816px; min-height: 1056px; \}/);
   assert.match(css, /\.document-preview \{[^}]*background: var\(--paper\)/);
   assert.match(css, /\.preview-scroll \{[^}]*overflow: auto/);
+  assert.match(css, /\.docx-preview-fullscreen \{[^}]*position: fixed/);
   assert.match(css, /\.studio-start \{/);
   assert.doesNotMatch(css, /overscroll-behavior:\s*contain/);
   assert.match(css, /print-color-adjust: exact/);
@@ -117,6 +119,8 @@ test("detects legal Markdown and exposes unrestricted styling", async () => {
   assert.match(page, /markdown_upload/);
   assert.match(page, /pdf_export/);
   assert.match(page, /docx_export/);
+  assert.match(page, /docx_preview/);
+  assert.match(page, /Close DOCX preview/);
   assert.match(page, /\/markdown-to-word/);
   assert.match(page, /OUTPUT CONTRACT/);
   assert.match(page, /MARKDOWN TOOLKIT/);

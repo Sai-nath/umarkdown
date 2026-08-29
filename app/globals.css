@@ -196,6 +196,10 @@ a { color: inherit; text-decoration: none; }
 .preview-actions > span:not(.live) { min-width: 40px; text-align: center; color: #c6beb8; font-size: 9px; }
 .preview-actions .fit-button { margin-left: 4px; font-size: 8px; text-transform: uppercase; letter-spacing: .05em; }
 .preview-actions .live { margin-left: 10px; }
+.preview-actions .preview-close { min-width: 76px; margin-left: 10px; color: #f2ede8; border-color: #746d67; }
+.docx-preview-fullscreen { position: fixed; inset: 0; z-index: 1000; width: 100vw; height: 100dvh; min-height: 0; background: #302d2b; }
+.docx-preview-fullscreen .preview-toolbar { padding-left: 18px; }
+.docx-preview-fullscreen .cover-remove, .docx-preview-fullscreen .cover-hint, .docx-preview-fullscreen .logo-add, .docx-preview-fullscreen .cover-logo button { display: none; }
 .preview-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: auto; scroll-behavior: smooth; outline: none; background-color: #353230; background-image: radial-gradient(#ffffff0d 1px, transparent 1px); background-size: 18px 18px; scrollbar-color: #6b625c #2b2927; scrollbar-width: thin; }
 .preview-scroll:focus-visible { box-shadow: inset 0 0 0 2px #9f3058; }
 .preview-scroll::-webkit-scrollbar, .editor-pane textarea::-webkit-scrollbar, .inspector-scroll::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -556,8 +560,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .editor-toolbar button { flex: none; }
   .editor-pane { min-height: 350px; height: 46vh; }
   .preview-pane { min-height: 480px; height: 62vh; }
+  .preview-pane.docx-preview-fullscreen { min-height: 0; height: 100dvh; }
   .preview-toolbar > span:first-child { display: none; }
   .preview-toolbar { justify-content: flex-end; }
+  .docx-preview-fullscreen .preview-toolbar { justify-content: space-between; }
+  .docx-preview-fullscreen .preview-toolbar > span:first-child { display: inline; }
+  .docx-preview-fullscreen .preview-actions .live, .docx-preview-fullscreen .preview-actions > span:not(.live) { display: none; }
+  .docx-preview-fullscreen .preview-actions .preview-close { min-width: 62px; margin-left: 4px; }
   .pane-label { padding: 0 12px; }
   .page-stage { padding: 18px 14px 44px; }
   .inspector-pane, .css-pane, .format-pane { width: 100%; }
