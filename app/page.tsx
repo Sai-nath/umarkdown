@@ -110,6 +110,23 @@ type PageSize = "a4" | "letter";
 type MarginSize = "narrow" | "normal" | "wide";
 type LogoSize = "small" | "standard" | "large";
 
+declare global {
+  interface Window { gtag?: (...args: unknown[]) => void; }
+}
+
+const workflowLinks = [
+  ["Markdown to Word", "/markdown-to-word"],
+  ["Markdown to PDF", "/markdown-to-pdf"],
+  ["Markdown to DOCX", "/markdown-to-docx"],
+  ["ChatGPT Markdown to Word", "/chatgpt-markdown-to-word"],
+  ["SRS document generator", "/srs-document-generator"],
+  ["Architecture document template", "/architecture-document-template"],
+] as const;
+
+function trackAnalytics(event: string, parameters: Record<string, string | number | boolean>) {
+  window.gtag?.("event", event, parameters);
+}
+
 type BrandKit = {
   organization: string;
   accent: string;
@@ -395,6 +412,7 @@ export default function Home() {
       setShowStart(false);
       setMarkdown(value);
       setFilename(file.name);
+      trackAnalytics("markdown_upload", { file_size_bytes: file.size, selected_standard: themeKey });
       const rawLines = value.split(/\r?\n/);
       const firstHeading = cleanMarkdownText(value.match(/^#\s+(.+)$/m)?.[1] ?? "");
       const lines = rawLines.map((line) => cleanMarkdownText(line.replace(/^#+\s*|^>\s*/g, ""))).filter(Boolean);
@@ -558,6 +576,7 @@ export default function Home() {
         html2canvas: { scale, useCORS: true, backgroundColor: theme.paper, logging: false, windowWidth: paper.scrollWidth },
         jsPDF: { unit: "mm", format: pageSize, orientation: "portrait" },
       }).from(paper).save();
+      trackAnalytics("pdf_export", { selected_standard: themeKey, page_size: pageSize });
       flash("PDF downloaded.");
     } catch {
       flash("Couldn't build the PDF. Try a shorter document or export DOCX instead.");
@@ -698,6 +717,7 @@ export default function Home() {
     a.href = url;
     a.download = filename.replace(/\.md$/i, "") + ".docx";
     a.click();
+    trackAnalytics("docx_export", { selected_standard: themeKey, page_size: pageSize });
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     flash("Professional DOCX downloaded.");
   };
@@ -965,6 +985,11 @@ export default function Home() {
       </section>
 
       <section className="features" id="features"><div className="shell feature-grid reveal"><div><span className="feature-no">01</span><h3>Standards, not skins</h3><p>Legal, SRS, architecture, executive, editorial, academic and technical standards shape preview and export.</p></div><div><span className="feature-no">02</span><h3>Style without limits</h3><p>Eight CSS recipes, live colour and typography controls, plus unrestricted custom CSS for every uploaded file.</p></div><div><span className="feature-no">03</span><h3>Word-native output</h3><p>Real headings, styled tables, numbered lists, code blocks and editable document structure.</p></div></div></section>
+
+      <section className="workflow-links shell" aria-labelledby="workflow-links-title">
+        <div><span className="section-kicker">POPULAR WORKFLOWS</span><h2 id="workflow-links-title">Start with the document you need.</h2></div>
+        <nav aria-label="Markdown converters and templates">{workflowLinks.map(([label, href]) => <a key={href} href={href}><span>{label}</span><b>→</b></a>)}</nav>
+      </section>
 
       <section className="cta-band">
         <div className="shell cta-inner reveal">

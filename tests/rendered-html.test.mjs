@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-async function render() {
+async function render(path = "/") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(new Request("http://localhost/", { headers: { accept: "text/html" } }), {
+  return worker.fetch(new Request(`http://localhost${path}`, { headers: { accept: "text/html" } }), {
     ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
   }, { waitUntil() {}, passThroughOnException() {} });
 }
@@ -52,6 +52,40 @@ test("keeps long previews on a readable paper canvas", async () => {
   assert.match(css, /\.studio, \.shell-wide \{ width: 100%/);
 });
 
+test("renders unique indexable landing pages with FAQs and internal links", async () => {
+  const pages = [
+    ["/markdown-to-word", "Convert Markdown to Word without rebuilding the formatting"],
+    ["/markdown-to-pdf", "Turn Markdown into a polished PDF directly in your browser"],
+    ["/markdown-to-docx", "Export Markdown as a professional DOCX with real Word styles"],
+    ["/chatgpt-markdown-to-word", "Turn ChatGPT Markdown into Word without spending tokens on formatting"],
+    ["/srs-document-generator", "Create a review-ready software requirements specification from Markdown"],
+    ["/architecture-document-template", "A practical architecture document template for systems and decisions"],
+  ];
+  for (const [path, heading] of pages) {
+    const response = await render(path);
+    assert.equal(response.status, 200, path);
+    const html = await response.text();
+    assert.equal((html.match(/<h1(?:\s|>)/g) ?? []).length, 1, path);
+    assert.match(html, new RegExp(heading));
+    assert.match(html, new RegExp(`<link rel="canonical" href="https://www\\.unmarkdown\\.in${path}"`));
+    assert.match(html, /FAQPage/);
+    assert.match(html, /SoftwareApplication/);
+    assert.match(html, /Explore related Markdown tools and templates/);
+  }
+});
+
+test("publishes every landing page in the sitemap and exposes the IndexNow key", async () => {
+  const sitemap = await render("/sitemap.xml");
+  assert.equal(sitemap.status, 200);
+  const xml = await sitemap.text();
+  for (const slug of ["markdown-to-word", "markdown-to-pdf", "markdown-to-docx", "chatgpt-markdown-to-word", "srs-document-generator", "architecture-document-template"]) {
+    assert.match(xml, new RegExp(`https://www\\.unmarkdown\\.in/${slug}`));
+  }
+  const key = await render("/api/indexnow");
+  assert.equal(key.status, 200);
+  assert.match(await key.text(), /^[a-f0-9]{32}$/);
+});
+
 test("detects legal Markdown and exposes unrestricted styling", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /privacy policy\|terms/);
@@ -72,6 +106,10 @@ test("detects legal Markdown and exposes unrestricted styling", async () => {
   assert.match(page, /import\("html2pdf\.js"\)/);
   assert.match(page, /paperRef/);
   assert.match(page, /Building PDF…/);
+  assert.match(page, /markdown_upload/);
+  assert.match(page, /pdf_export/);
+  assert.match(page, /docx_export/);
+  assert.match(page, /\/markdown-to-word/);
   assert.doesNotMatch(page, /window\.print/);
   assert.doesNotMatch(page, /＋ Upload \.md|↑ Upload \.md/);
   assert.ok(page.indexOf("technical specification") < page.indexOf("/privacy|terms|policy|agreement|legal|cookie/"));
