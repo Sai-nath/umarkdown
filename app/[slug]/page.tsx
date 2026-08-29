@@ -63,7 +63,7 @@ export default async function SeoLandingPage({ params }: Props) {
     </nav>
 
     <header className="seo-hero">
-      <div className="seo-hero-media" role="img" aria-label="Unmarkdown studio with Markdown editor and live professional document preview" style={{ backgroundImage: "url('/studio-current.png')" }} />
+      <div className="seo-hero-media" role="img" aria-label="Premium dark publishing background with blank professional document sheets" style={{ backgroundImage: "url('/studio-premium-background.jpg')" }} />
       <div className="seo-hero-inner shell">
         <span><i aria-hidden="true" /> {page.eyebrow}</span>
         <h1>{page.h1}</h1>
