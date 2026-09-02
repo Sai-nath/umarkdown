@@ -3,15 +3,16 @@
 import Link from "next/link";
 import { useState } from "react";
 
-type Props = { label: string; heading: string; intro: string; prompt: string };
+type Props = { label: string; heading: string; intro: string; prompt: string; studioHref: string };
 
-export default function PromptCard({ label, heading, intro, prompt }: Props) {
+export default function PromptCard({ label, heading, intro, prompt, studioHref }: Props) {
   const [status, setStatus] = useState("");
 
   const copyPrompt = async () => {
     try {
       await navigator.clipboard.writeText(prompt);
       setStatus("Prompt copied. Paste it into your AI chat.");
+      window.gtag?.("event", "prompt_copied", { landing_page: label });
     } catch {
       setStatus("Select the prompt and copy it manually.");
     }
@@ -25,7 +26,7 @@ export default function PromptCard({ label, heading, intro, prompt }: Props) {
         <p>{intro}</p>
         <div className="seo-prompt-actions">
           <button type="button" onClick={copyPrompt}>{status.startsWith("Prompt copied") ? "Copied" : "Copy complete prompt"}<span aria-hidden="true">{status.startsWith("Prompt copied") ? "✓" : "⧉"}</span></button>
-          <Link href="/#studio">Open document studio <span aria-hidden="true">→</span></Link>
+          <Link href={studioHref}>Try it in the studio <span aria-hidden="true">→</span></Link>
         </div>
         <small aria-live="polite">{status || "No sign-up. Use with any AI assistant."}</small>
       </div>

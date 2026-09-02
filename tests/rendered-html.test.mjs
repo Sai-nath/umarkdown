@@ -16,7 +16,7 @@ test("renders the unmarkdown.in Markdown converter", async () => {
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
   const html = await response.text();
-  assert.match(html, /<title>unmarkdown\.in — Professional documents from Markdown<\/title>/i);
+  assert.match(html, /<title>Markdown to Word and PDF Converter \| Unmarkdown<\/title>/i);
   assert.match(html, /AI writes Markdown/);
   assert.match(html, /Upload a \.md file/);
   assert.match(html, /DOCUMENT PREVIEW/);
@@ -73,6 +73,11 @@ test("renders unique indexable landing pages with FAQs and internal links", asyn
     assert.match(html, new RegExp(`<link rel="canonical" href="https://www\\.unmarkdown\\.in${path}"`));
     assert.match(html, /FAQPage/);
     assert.match(html, /SoftwareApplication/);
+    assert.match(html, /HowTo/);
+    assert.match(html, /WORKING EXAMPLE/);
+    assert.match(html, /Open this sample in the studio/);
+    assert.match(html, /og-v3\.png/);
+    assert.match(html, /\?sample=/);
     assert.match(html, /studio-premium-background\.jpg/);
     assert.match(html, /Upload Markdown/);
     assert.match(html, /Export DOCX or PDF/);
@@ -108,6 +113,18 @@ test("keeps useful AI prompts on the SRS and architecture pages", async () => {
   assert.match(architecture, /ADR-001/);
   assert.match(architecture, /Mermaid diagrams/);
   assert.match(architecture, /Do not invent services/);
+});
+
+test("offers an AI prompt and preloaded studio path on every search page", async () => {
+  for (const path of ["/markdown-to-word", "/markdown-to-pdf", "/markdown-to-docx", "/chatgpt-markdown-to-word", "/srs-document-generator", "/architecture-document-template"]) {
+    const html = await (await render(path)).text();
+    assert.match(html, /Copy complete prompt/, path);
+    assert.match(html, /Try a ready-made sample/, path);
+    assert.match(html, /from=/, path);
+  }
+  const home = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(home, /landing_sample_opened/);
+  assert.match(home, /URLSearchParams/);
 });
 
 test("detects legal Markdown and exposes unrestricted styling", async () => {

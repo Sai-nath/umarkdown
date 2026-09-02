@@ -346,8 +346,23 @@ export default function Home() {
       setFilename(`${key}-sample.md`);
       const heading = text.match(/^#\s+(.+)$/m)?.[1];
       if (heading) setTitle(cleanMarkdownText(heading));
+      trackAnalytics("sample_loaded", { selected_standard: key });
     } catch {}
   };
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      const parameters = new URLSearchParams(window.location.search);
+      const sample = parameters.get("sample") as ThemeKey | null;
+      const source = parameters.get("from") ?? "direct";
+      if (!sample || !Object.prototype.hasOwnProperty.call(themes, sample)) return;
+      setThemeKey(sample);
+      setShowStart(false);
+      void loadSample(sample);
+      trackAnalytics("landing_sample_opened", { landing_page: source, selected_standard: sample });
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, []);
 
   const applyStandard = (key: ThemeKey) => {
     setThemeKey(key);
@@ -638,6 +653,7 @@ export default function Home() {
     try {
       await navigator.clipboard.writeText(activePrompt);
       setPromptCopied(true);
+      trackAnalytics("prompt_copied", { selected_standard: themeKey });
       window.setTimeout(() => setPromptCopied(false), 2800);
       flash(`${themes[themeKey].label} prompt copied — paste it into any AI chat.`);
     } catch {

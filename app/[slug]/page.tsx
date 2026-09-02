@@ -16,13 +16,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const page = seoPages[(await params).slug];
   if (!page) return {};
   const canonical = `/${page.slug}`;
+  const image = `${siteUrl}/og-v3.png`;
   return {
     title: page.title,
     description: page.description,
     alternates: { canonical },
     robots: { index: true, follow: true },
-    openGraph: { type: "website", url: `${siteUrl}${canonical}`, title: page.title, description: page.description, images: [] },
-    twitter: { card: "summary", title: page.title, description: page.description, images: [] },
+    openGraph: { type: "website", url: `${siteUrl}${canonical}`, title: page.title, description: page.description, images: [{ url: image, width: 1717, height: 916, alt: "Unmarkdown turns Markdown into professional Word and PDF documents" }] },
+    twitter: { card: "summary_large_image", title: page.title, description: page.description, images: [image] },
   };
 }
 
@@ -30,6 +31,7 @@ export default async function SeoLandingPage({ params }: Props) {
   const page = seoPages[(await params).slug];
   if (!page) notFound();
   const related = seoPageList.filter(({ slug }) => slug !== page.slug);
+  const studioHref = `/?sample=${page.sample}&from=${page.slug}#studio`;
   const structuredData = [
     {
       "@context": "https://schema.org",
@@ -54,6 +56,13 @@ export default async function SeoLandingPage({ params }: Props) {
         { "@type": "ListItem", position: 2, name: page.h1, item: `${siteUrl}/${page.slug}` },
       ],
     },
+    {
+      "@context": "https://schema.org",
+      "@type": "HowTo",
+      name: page.h1,
+      description: page.lede,
+      step: page.steps.map(({ title, text }, index) => ({ "@type": "HowToStep", position: index + 1, name: title, text })),
+    },
   ];
 
   return <main className="seo-page">
@@ -69,7 +78,7 @@ export default async function SeoLandingPage({ params }: Props) {
         <span><i aria-hidden="true" /> {page.eyebrow}</span>
         <h1>{page.h1}</h1>
         <p>{page.lede}</p>
-        <div className="seo-hero-actions"><Link href="/#studio">Start in the document studio <b>→</b></Link><Link href="/#templates">Browse document standards</Link></div>
+        <div className="seo-hero-actions"><Link href={studioHref}>Try a ready-made sample <b>→</b></Link><Link href="/#templates">Browse document standards</Link></div>
         <ol className="seo-hero-flow" aria-label="How Unmarkdown works">
           <li><b>01</b><span>Upload Markdown</span></li>
           <li><b>02</b><span>Pick a standard</span></li>
@@ -85,7 +94,12 @@ export default async function SeoLandingPage({ params }: Props) {
       <p>{page.problem}</p>
     </section>
 
-    {page.prompt && <PromptCard label={page.prompt.label} heading={page.prompt.heading} intro={page.prompt.intro} prompt={page.prompt.text} />}
+    <section className="seo-example shell">
+      <div><span className="section-kicker">WORKING EXAMPLE</span><h2>{page.example.title}</h2><p>{page.example.intro}</p><Link href={studioHref}>Open this sample in the studio <b>→</b></Link></div>
+      <pre tabIndex={0}><code>{page.example.markdown}</code></pre>
+    </section>
+
+    {page.prompt && <PromptCard label={page.prompt.label} heading={page.prompt.heading} intro={page.prompt.intro} prompt={page.prompt.text} studioHref={studioHref} />}
 
     <section className="seo-benefits">
       <div className="shell">
@@ -108,7 +122,7 @@ export default async function SeoLandingPage({ params }: Props) {
       <nav aria-label="Related pages">{related.map((item) => <Link href={`/${item.slug}`} key={item.slug}><span>{item.eyebrow}</span><b>{item.h1}</b><i>→</i></Link>)}</nav>
     </section>
 
-    <section className="seo-final-cta"><div className="shell"><div><span>READY TO PUBLISH</span><h2>Keep the Markdown. Ship the document.</h2></div><Link href="/#top">Open Unmarkdown <b>→</b></Link></div></section>
+    <section className="seo-final-cta"><div className="shell"><div><span>READY TO PUBLISH</span><h2>Keep the Markdown. Ship the document.</h2></div><Link href={studioHref}>Try the sample <b>→</b></Link></div></section>
 
     <footer className="seo-footer shell"><Link className="brand" href="/"><span className="brand-name">unmarkdown<em>.in</em></span></Link><p>Professional documents from Markdown.</p><Link href="mailto:aichroniclesmedia@gmail.com">aichroniclesmedia@gmail.com</Link></footer>
   </main>;
