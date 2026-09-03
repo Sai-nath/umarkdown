@@ -175,7 +175,16 @@ const promptSamples: Record<ThemeKey, string> = {
 type CssPresetKey = keyof typeof cssPresets;
 type PageSize = "a4" | "letter";
 type MarginSize = "narrow" | "normal" | "wide";
-type LogoSize = "small" | "standard" | "large";
+type BrandLayout = "classic" | "letterhead" | "centered" | "executive" | "footer";
+
+const brandLayouts: Record<BrandLayout, { label: string; description: string; placement: [boolean, boolean, boolean] }> = {
+  classic: { label: "Classic cover", description: "Logo leads the cover", placement: [true, false, false] },
+  letterhead: { label: "Letterhead", description: "Logo at header left", placement: [false, true, false] },
+  centered: { label: "Centered", description: "Balanced masthead", placement: [false, true, false] },
+  executive: { label: "Executive", description: "Logo at header right", placement: [false, true, false] },
+  footer: { label: "Footer mark", description: "Compact signature footer", placement: [false, false, true] },
+};
+const brandLayoutKeys = Object.keys(brandLayouts) as BrandLayout[];
 
 declare global {
   interface Window { gtag?: (...args: unknown[]) => void; }
@@ -202,7 +211,9 @@ type BrandKit = {
   logoOnCover: boolean;
   logoInHeader: boolean;
   logoInFooter: boolean;
-  logoSize: LogoSize;
+  logoScale: number;
+  brandLayout: BrandLayout;
+  logoSize?: "small" | "standard" | "large";
 };
 
 function playBulbSwitch(on: boolean) {
@@ -319,7 +330,8 @@ export default function Home() {
   const [logoOnCover, setLogoOnCover] = useState(true);
   const [logoInHeader, setLogoInHeader] = useState(false);
   const [logoInFooter, setLogoInFooter] = useState(false);
-  const [logoSize, setLogoSize] = useState<LogoSize>("standard");
+  const [logoScale, setLogoScale] = useState(100);
+  const [brandLayout, setBrandLayout] = useState<BrandLayout>("classic");
   const [footerText, setFooterText] = useState("");
   const [promptCopied, setPromptCopied] = useState(false);
   const [studioLight, setStudioLight] = useState(false);
@@ -409,7 +421,7 @@ export default function Home() {
   }, [docxPreviewOpen]);
   const theme = themes[themeKey];
   const activeAccent = accentOverride || theme.accent;
-  const logoScale = logoSize === "small" ? 0.72 : logoSize === "large" ? 1.3 : 1;
+  const logoScaleFactor = logoScale / 100;
   const resolvedFooterText = footerText.trim() || `${organization} · ${classification}`;
 
   useEffect(() => {
@@ -425,7 +437,9 @@ export default function Home() {
         if (typeof saved.logoOnCover === "boolean") setLogoOnCover(saved.logoOnCover);
         if (typeof saved.logoInHeader === "boolean") setLogoInHeader(saved.logoInHeader);
         if (typeof saved.logoInFooter === "boolean") setLogoInFooter(saved.logoInFooter);
-        if (["small", "standard", "large"].includes(saved.logoSize ?? "")) setLogoSize(saved.logoSize as LogoSize);
+        if (typeof saved.logoScale === "number") setLogoScale(Math.max(60, Math.min(160, saved.logoScale)));
+        else if (saved.logoSize) setLogoScale(saved.logoSize === "small" ? 72 : saved.logoSize === "large" ? 130 : 100);
+        if (saved.brandLayout && Object.prototype.hasOwnProperty.call(brandLayouts, saved.brandLayout)) setBrandLayout(saved.brandLayout);
         if (saved.logo && /^data:image\/(?:png|jpeg|gif|bmp);base64,/i.test(saved.logo.src) && saved.logo.width > 0 && saved.logo.height > 0) setLogo(saved.logo);
       } catch {}
     }, 0);
@@ -572,7 +586,7 @@ export default function Home() {
       const img = new Image();
       img.onload = () => {
         setLogo({ src, width: img.naturalWidth, height: img.naturalHeight, format });
-        flash("Logo added to the cover page.");
+        flash("Logo added. Choose a brand layout and size.");
       };
       img.src = src;
     };
@@ -581,12 +595,23 @@ export default function Home() {
 
   const saveBrandKit = () => {
     try {
-      const brandKit: BrandKit = { organization, accent: accentOverride, footerText, logo, logoOnCover, logoInHeader, logoInFooter, logoSize };
+      const brandKit: BrandKit = { organization, accent: accentOverride, footerText, logo, logoOnCover, logoInHeader, logoInFooter, logoScale, brandLayout };
       localStorage.setItem("unmarkdown-brand-kit", JSON.stringify(brandKit));
       flash("Brand kit saved in this browser.");
     } catch {
       flash("Couldn't save the brand kit. Try a smaller logo.");
     }
+  };
+
+  const applyBrandLayout = (key: BrandLayout) => {
+    const [cover, header, footer] = brandLayouts[key].placement;
+    setBrandLayout(key);
+    setLogoOnCover(cover);
+    setLogoInHeader(header);
+    setLogoInFooter(footer);
+    setShowHeader(true);
+    setShowFooter(true);
+    flash(`${brandLayouts[key].label} branding applied.`);
   };
 
   const forgetBrandKit = () => {
@@ -716,7 +741,7 @@ export default function Home() {
 
     const logoData = logo ? Uint8Array.from(atob(logo.src.split(",")[1]), (char) => char.charCodeAt(0)) : null;
     const logoImage = (targetHeight: number, maxWidth: number) => {
-      let height = Math.min(Math.round(targetHeight * logoScale), logo!.height);
+      let height = Math.min(Math.round(targetHeight * logoScaleFactor), logo!.height);
       let width = Math.round(logo!.width * (height / logo!.height));
       if (width > maxWidth) {
         width = maxWidth;
@@ -725,6 +750,19 @@ export default function Home() {
       return new ImageRun({ data: logoData!, transformation: { width, height }, type: logo!.format });
     };
     const coverLogo = Boolean(logo && logoOnCover);
+    const headerAlignment = brandLayout === "centered" ? AlignmentType.CENTER : brandLayout === "executive" ? AlignmentType.RIGHT : AlignmentType.LEFT;
+    const footerAlignment = brandLayout === "centered" ? AlignmentType.CENTER : brandLayout === "classic" ? AlignmentType.RIGHT : AlignmentType.LEFT;
+    const headerText = brandLayout === "classic" ? `${organization}  /  ${title}` : brandLayout === "footer" ? `${title}  /  ${classification}` : `${organization}  /  ${title}  /  ${classification} · V${version}`;
+    const headerContent = [
+      ...(logo && logoInHeader && brandLayout !== "executive" ? [logoImage(22, 120), run("   ")] : []),
+      run(headerText, { bold: true, color: "6C737A" }),
+      ...(logo && logoInHeader && brandLayout === "executive" ? [run("   "), logoImage(22, 120)] : []),
+    ];
+    const footerContent = [
+      ...(logo && logoInFooter ? [logoImage(16, 90), run("   ")] : []),
+      run(resolvedFooterText, { color: "747A80" }),
+      ...(showPageNumbers ? [run("   •   ", { color: "747A80" }), new TextRun({ children: [PageNumber.CURRENT], font: theme.wordFont, size: 18, color: "747A80" })] : []),
+    ];
 
     if (coverPage) {
       if (coverLogo) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 700, after: 200 }, children: [logoImage(52, 220)] }));
@@ -810,8 +848,8 @@ export default function Home() {
       },
       sections: [{
         properties: { page: { size: page, margin: { top: margins, right: margins, bottom: margins, left: margins } } },
-        headers: showHeader ? { default: new Header({ children: [new Paragraph({ children: [...(logo && logoInHeader ? [logoImage(22, 120), run("   ")] : []), run(`${organization}  /  ${title}`, { bold: true, color: "6C737A" })], border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "D8DCE0", space: 6 } } })] }) } : undefined,
-        footers: showFooter ? { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [run(resolvedFooterText, { color: "747A80" }), ...(logo && logoInFooter ? [run("   "), logoImage(16, 90)] : []), ...(showPageNumbers ? [run("   •   ", { color: "747A80" }), new TextRun({ children: [PageNumber.CURRENT], font: theme.wordFont, size: 18, color: "747A80" })] : [])] })] }) } : undefined,
+        headers: showHeader ? { default: new Header({ children: [new Paragraph({ alignment: headerAlignment, children: headerContent, border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "D8DCE0", space: 6 } } })] }) } : undefined,
+        footers: showFooter ? { default: new Footer({ children: [new Paragraph({ alignment: footerAlignment, children: footerContent })] }) } : undefined,
         children,
       }],
     });
@@ -885,9 +923,16 @@ export default function Home() {
         <label>Brand colour<div className="brand-color"><input aria-label="Brand colour" type="color" value={activeAccent} onChange={(e) => setAccentOverride(e.target.value)} /><button onClick={() => setAccentOverride("")}>Use theme colour</button></div></label>
         <label>Company logo</label>
         <div className="logo-row">{logo ? <><img src={logo.src} alt="Logo preview" /><button onClick={() => setLogo(null)}>Remove</button></> : <button onClick={() => logoRef.current?.click()}>Upload logo</button>}</div>
-        {logo && <div className="logo-placement">{[["Cover page", logoOnCover, setLogoOnCover], ["Header", logoInHeader, setLogoInHeader], ["Footer", logoInFooter, setLogoInFooter]].map(([label, value, setter]) => <button key={String(label)} className={value ? "selected" : ""} onClick={() => (setter as (value: boolean) => void)(!value)}>{String(label)}</button>)}</div>}
-        {logo && <label>Logo size<div className="segmented three">{(["small", "standard", "large"] as LogoSize[]).map((size) => <button key={size} className={logoSize === size ? "selected" : ""} onClick={() => setLogoSize(size)}>{size[0].toUpperCase() + size.slice(1)}</button>)}</div></label>}
-        <label>Footer text<input value={footerText} placeholder={`${organization} · ${classification}`} onChange={(e) => setFooterText(e.target.value)} /></label>
+        <label>Brand layout</label>
+        <div className="brand-layout-grid" role="radiogroup" aria-label="Brand layout">
+          {brandLayoutKeys.map((key) => <button key={key} role="radio" aria-checked={brandLayout === key} className={brandLayout === key ? "selected" : ""} onClick={() => applyBrandLayout(key)}>
+            <span className={`brand-layout-preview layout-${key}`} aria-hidden="true"><i className="mini-logo"/><i className="mini-name"/><i className="mini-detail"/><i className="mini-page"/></span>
+            <span><b>{brandLayouts[key].label}</b><small>{brandLayouts[key].description}</small></span>
+          </button>)}
+        </div>
+        {logo && <><label>Show logo in</label><div className="logo-placement">{[["Cover", logoOnCover, setLogoOnCover], ["Header", logoInHeader, setLogoInHeader], ["Footer", logoInFooter, setLogoInFooter]].map(([label, value, setter]) => <button key={String(label)} className={value ? "selected" : ""} aria-pressed={value as boolean} onClick={() => (setter as (value: boolean) => void)(!value)}>{String(label)}</button>)}</div></>}
+        {logo && <label className="logo-size-control"><span>Logo size <b>{logoScale}%</b></span><input aria-label="Logo size" type="range" min="60" max="160" step="5" value={logoScale} onChange={(e) => setLogoScale(Number(e.target.value))} /></label>}
+        <label>Company details / footer<input value={footerText} placeholder={`${organization} · ${classification}`} onChange={(e) => setFooterText(e.target.value)} /></label>
         <div className="brand-actions"><button onClick={saveBrandKit}>Save company style</button><button onClick={forgetBrandKit}>Forget saved</button></div>
         <p className="brand-note">Saved only in this browser. Logos must be under 2 MB.</p>
       </div>
@@ -1049,8 +1094,8 @@ export default function Home() {
               <div className="pane-label preview-toolbar"><span>{docxPreviewOpen ? "DOCX LAYOUT PREVIEW" : "DOCUMENT PREVIEW"} · {pageSize.toUpperCase()}</span><div className="preview-actions"><button aria-label="Zoom out" onClick={() => setZoom(Math.max(40, zoom - 10))}>−</button><span>{zoom}%</span><button aria-label="Zoom in" onClick={() => setZoom(Math.min(125, zoom + 10))}>＋</button><button className="fit-button" onClick={fitPreview}>Fit</button><span className={`live ${isRendering ? "busy" : ""}`}><i/> {isRendering ? "Rendering…" : "Live"}</span>{docxPreviewOpen && <button className="preview-close" aria-label="Close DOCX preview" onClick={closeDocxPreview}>× Close</button>}</div></div>
               <div className="preview-scroll" ref={previewRef} tabIndex={0} aria-label="Scrollable document preview">
                 <div className="page-stage">
-                  <div ref={paperRef} key={`${themeKey}-${pageSize}-${marginSize}`} className={`paper document-shell page-${pageSize} margin-${marginSize}`} style={{ "--accent": activeAccent, "--ink": theme.ink, "--paper": theme.paper, "--doc-font": theme.font, "--page-padding": padding, "--body-size": `${bodySize}px`, "--line-height": lineHeight, "--logo-scale": logoScale, zoom: zoom / 100 } as React.CSSProperties}>
-                    {showHeader && <div className="paper-header"><span className="header-brand">{logo && logoInHeader && <img src={logo.src} alt="" />}{organization}</span><span>{classification} · V{version}</span></div>}
+                  <div ref={paperRef} key={`${themeKey}-${pageSize}-${marginSize}`} className={`paper document-shell page-${pageSize} margin-${marginSize} brand-${brandLayout}`} style={{ "--accent": activeAccent, "--ink": theme.ink, "--paper": theme.paper, "--doc-font": theme.font, "--page-padding": padding, "--body-size": `${bodySize}px`, "--line-height": lineHeight, "--logo-scale": logoScaleFactor, zoom: zoom / 100 } as React.CSSProperties}>
+                    {showHeader && <div className="paper-header"><span className="header-brand">{logo && logoInHeader && <img src={logo.src} alt="" />}<b>{organization}</b></span><span className="header-document">{title}</span><span className="header-meta">{classification} · V{version}</span></div>}
                     {coverPage && <section className="cover-preview">
                       <button className="cover-remove" title="Remove the cover page (re-enable in Document setup)" onClick={() => { setCoverPage(false); flash("Cover removed — re-enable it in Document setup."); }}>× Remove cover</button>
                       {logo && logoOnCover && <div className="cover-logo"><img src={logo.src} alt={`${organization} logo`} /><button title="Remove logo from cover" onClick={() => setLogoOnCover(false)}>×</button></div>}
@@ -1065,7 +1110,7 @@ export default function Home() {
                       <em className="cover-hint">Click any line to edit</em>
                     </section>}
                     <article className={`document-preview theme-${themeKey} ${numberedHeadings ? "numbered-headings" : ""}`} dangerouslySetInnerHTML={{ __html: html }} />
-                    {showFooter && <div className="paper-footer"><span>{resolvedFooterText}</span>{logo && logoInFooter && <img className="footer-logo" src={logo.src} alt="" />}{showPageNumbers && <span>01</span>}</div>}
+                    {showFooter && <div className="paper-footer"><span className="footer-brand">{logo && logoInFooter && <img className="footer-logo" src={logo.src} alt="" />}<span>{resolvedFooterText}</span></span><span className="footer-document">{title}</span>{showPageNumbers && <span className="footer-page">01</span>}</div>}
                   </div>
                 </div>
               </div>

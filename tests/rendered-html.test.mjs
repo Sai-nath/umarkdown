@@ -137,8 +137,15 @@ test("detects legal Markdown and exposes unrestricted styling", async () => {
   assert.match(page, /headingIsSection/);
   assert.match(page, /boldTitles/);
   assert.match(page, /Company setup/);
-  assert.match(page, /Footer text/);
+  assert.match(page, /Company details \/ footer/);
   assert.match(page, /Save company style/);
+  assert.match(page, /Classic cover/);
+  assert.match(page, /Letterhead/);
+  assert.match(page, /Centered/);
+  assert.match(page, /Executive/);
+  assert.match(page, /Footer mark/);
+  assert.match(page, /Logo size/);
+  assert.match(page, /brandLayout/);
   assert.match(page, /showFooter/);
   assert.match(page, /flowchart LR/);
   assert.match(page, /renderMermaidSvg/);
