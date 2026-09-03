@@ -18,6 +18,7 @@ const promptCore = [
   "- Fenced code blocks with a language tag such as `json`, `yaml`, `bash`, `typescript`, or `sql`; never use a fence around the whole document.",
   "- Mermaid diagrams in a fenced `mermaid` block when a flow, sequence, architecture, state, or dependency diagram adds real value.",
   "- Descriptive links as `[label](https://example.com)` and `---` rules only between major document parts.",
+  "- Mark important terms at their first relevant mention with `[[index: Term]]`. Use `[[index: Primary term: Subentry]]` for a nested alphabetical index entry, and do not mark the same occurrence twice.",
   "- Escape Markdown control characters when they are meant to appear literally.",
 ].join("\n");
 

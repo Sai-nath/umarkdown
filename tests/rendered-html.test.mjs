@@ -172,12 +172,18 @@ test("detects legal Markdown and exposes unrestricted styling", async () => {
   assert.match(page, /docx_export/);
   assert.match(page, /docx_preview/);
   assert.match(page, /Close DOCX preview/);
+  assert.match(page, /Alphabetical index/);
+  assert.match(page, /Index term/);
+  assert.match(page, /new SimpleField\(`XE/);
+  assert.match(page, /new SimpleField\('INDEX/);
+  assert.match(page, /updateFields: true/);
   assert.match(page, /\/markdown-to-word/);
   const prompts = await readFile(new URL("../app/document-prompts.ts", import.meta.url), "utf8");
   assert.match(prompts, /OUTPUT CONTRACT/);
   assert.match(prompts, /MARKDOWN TOOLKIT/);
   assert.match(prompts, /FINAL QUALITY CHECK/);
   assert.match(prompts, /fenced `mermaid` block/);
+  assert.match(prompts, /\[\[index: Term\]\]/);
   assert.match(prompts, /\[TBD: specific information needed\]/);
   assert.match(prompts, /traceability table/);
   assert.match(prompts, /ADR table/);

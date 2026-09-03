@@ -4,6 +4,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { marked, Renderer, Tokens } from "marked";
 import DOMPurify from "dompurify";
 import { buildDocumentPrompt } from "./document-prompts";
+import { extractIndexTerms, stripIndexMarkers } from "./index-markers";
 
 const starter = `# Software Requirements Specification
 
@@ -248,6 +249,7 @@ export default function Home() {
   const [showHeader, setShowHeader] = useState(true);
   const [showFooter, setShowFooter] = useState(true);
   const [showPageNumbers, setShowPageNumbers] = useState(true);
+  const [alphabeticalIndex, setAlphabeticalIndex] = useState(true);
   const [zoom, setZoom] = useState(95);
   const [logo, setLogo] = useState<{ src: string; width: number; height: number; format: "png" | "jpg" | "gif" | "bmp" } | null>(null);
   const [logoOnCover, setLogoOnCover] = useState(true);
@@ -398,7 +400,8 @@ export default function Home() {
   const deferredMarkdown = useDeferredValue(markdown);
   const isRendering = deferredMarkdown !== markdown;
   const html = useMemo(() => {
-    const previewMarkdown = numberedHeadings ? deferredMarkdown.replace(/^(#{2,3})\s+\d+(?:\.\d+)*\.?\s+/gm, "$1 ") : deferredMarkdown;
+    const cleanMarkdown = stripIndexMarkers(deferredMarkdown);
+    const previewMarkdown = numberedHeadings ? cleanMarkdown.replace(/^(#{2,3})\s+\d+(?:\.\d+)*\.?\s+/gm, "$1 ") : cleanMarkdown;
     const renderer = new Renderer();
     const renderCode = renderer.code.bind(renderer);
     renderer.code = (token) => token.lang?.trim().toLowerCase() === "mermaid"
@@ -407,6 +410,7 @@ export default function Home() {
     const dirty = marked.parse(previewMarkdown, { gfm: true, breaks: true, renderer }) as string;
     return typeof window === "undefined" ? dirty : DOMPurify.sanitize(dirty);
   }, [deferredMarkdown, numberedHeadings]);
+  const indexTerms = useMemo(() => extractIndexTerms(deferredMarkdown), [deferredMarkdown]);
   const words = markdown.trim() ? markdown.trim().split(/\s+/).length : 0;
   const readingTime = Math.max(1, Math.ceil(words / 220));
   const padding = marginSize === "narrow" ? "42px" : marginSize === "wide" ? "88px" : "68px";
@@ -645,7 +649,7 @@ export default function Home() {
     flash("Building your professional Word document…");
     const {
       AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, ImageRun, PageBreak, PageNumber,
-      Packer, Paragraph, ShadingType, Table, TableCell, TableOfContents, TableRow, TextRun,
+      Packer, Paragraph, ShadingType, SimpleField, Table, TableCell, TableOfContents, TableRow, TextRun,
       VerticalAlign, WidthType,
     } = await import("docx");
     const tokens = marked.lexer(markdown);
@@ -662,6 +666,18 @@ export default function Home() {
       color: options.color ?? ink,
       size: options.code ? 19 : 22,
     });
+    const indexedRuns = (text: string, options: { bold?: boolean; italics?: boolean; code?: boolean; color?: string } = {}) => {
+      const parts: Array<InstanceType<typeof TextRun> | InstanceType<typeof SimpleField>> = [];
+      const marker = /\[\[index:\s*([^\]\r\n]+?)\s*\]\]/gi;
+      let cursor = 0;
+      for (const match of text.matchAll(marker)) {
+        if (match.index > cursor) parts.push(run(text.slice(cursor, match.index), options));
+        if (alphabeticalIndex) parts.push(new SimpleField(`XE "${match[1].trim().replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`));
+        cursor = match.index + match[0].length;
+      }
+      if (cursor < text.length) parts.push(run(text.slice(cursor), options));
+      return parts.length ? parts : [run(stripIndexMarkers(text), options)];
+    };
 
     const logoData = logo ? Uint8Array.from(atob(logo.src.split(",")[1]), (char) => char.charCodeAt(0)) : null;
     const logoImage = (targetHeight: number, maxWidth: number) => {
@@ -720,13 +736,13 @@ export default function Home() {
         let headingText = plainText(token);
         if (numberedHeadings && token.depth === 2) { sectionNumber += 1; subsectionNumber = 0; headingText = `${sectionNumber}. ${cleanHeading}`; }
         if (numberedHeadings && token.depth === 3) { subsectionNumber += 1; headingText = `${sectionNumber}.${subsectionNumber} ${cleanHeading}`; }
-        children.push(new Paragraph({ text: headingText, heading: level, spacing: { before: token.depth === 1 ? 0 : 300, after: 120 }, keepNext: true }));
+        children.push(new Paragraph({ children: indexedRuns(headingText), heading: level, spacing: { before: token.depth === 1 ? 0 : 300, after: 120 }, keepNext: true }));
       } else if (token.type === "paragraph" || token.type === "text") {
-        children.push(new Paragraph({ children: [run(plainText(token))], spacing: { after: 180, line: 330 }, widowControl: true }));
+        children.push(new Paragraph({ children: indexedRuns(plainText(token)), spacing: { after: 180, line: 330 }, widowControl: true }));
       } else if (token.type === "blockquote") {
-        children.push(new Paragraph({ children: [run(plainText(token), { italics: true, color: accent })], indent: { left: 420, right: 220 }, border: { left: { style: BorderStyle.SINGLE, size: 16, color: accent, space: 14 } }, shading: { type: ShadingType.CLEAR, fill: "F5F6F8" }, spacing: { before: 160, after: 200 } }));
+        children.push(new Paragraph({ children: indexedRuns(plainText(token), { italics: true, color: accent }), indent: { left: 420, right: 220 }, border: { left: { style: BorderStyle.SINGLE, size: 16, color: accent, space: 14 } }, shading: { type: ShadingType.CLEAR, fill: "F5F6F8" }, spacing: { before: 160, after: 200 } }));
       } else if (token.type === "list") {
-        for (const item of token.items) children.push(new Paragraph({ children: [run(plainText(item))], bullet: token.ordered ? undefined : { level: 0 }, numbering: token.ordered ? { reference: "numbered-list", level: 0 } : undefined, spacing: { after: 90, line: 300 } }));
+        for (const item of token.items) children.push(new Paragraph({ children: indexedRuns(plainText(item)), bullet: token.ordered ? undefined : { level: 0 }, numbering: token.ordered ? { reference: "numbered-list", level: 0 } : undefined, spacing: { after: 90, line: 300 } }));
       } else if (token.type === "code" && token.lang?.trim().toLowerCase() === "mermaid") {
         try {
           const image = await mermaidPng(await renderMermaidSvg(token.text, activeAccent, theme.ink));
@@ -745,7 +761,7 @@ export default function Home() {
             verticalAlign: VerticalAlign.CENTER,
             shading: rowIndex === 0 ? { type: ShadingType.CLEAR, fill: accent } : undefined,
             margins: { top: 110, bottom: 110, left: 130, right: 130 },
-            children: [new Paragraph({ children: [run(cell.text, { bold: rowIndex === 0, color: rowIndex === 0 ? "FFFFFF" : ink })], spacing: { after: 0 } })],
+            children: [new Paragraph({ children: indexedRuns(cell.text, { bold: rowIndex === 0, color: rowIndex === 0 ? "FFFFFF" : ink }), spacing: { after: 0 } })],
           })),
         }));
         children.push(new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, borders: { top: { style: BorderStyle.SINGLE, size: 4, color: "CCD1D6" }, bottom: { style: BorderStyle.SINGLE, size: 4, color: "CCD1D6" }, left: { style: BorderStyle.SINGLE, size: 4, color: "CCD1D6" }, right: { style: BorderStyle.SINGLE, size: 4, color: "CCD1D6" }, insideHorizontal: { style: BorderStyle.SINGLE, size: 3, color: "DDE1E5" }, insideVertical: { style: BorderStyle.SINGLE, size: 3, color: "DDE1E5" } } }));
@@ -753,11 +769,18 @@ export default function Home() {
       }
     }
 
+    if (alphabeticalIndex && indexTerms.length) {
+      children.push(new Paragraph({ children: [new PageBreak()] }));
+      children.push(new Paragraph({ text: "Index", heading: HeadingLevel.HEADING_1, spacing: { after: 240 } }));
+      children.push(new Paragraph({ children: [new SimpleField('INDEX \\e " · " \\h "A"', "Open in Word to update the alphabetical index and page references.")] }));
+    }
+
     const doc = new Document({
       creator: author,
       title,
       subject: themes[themeKey].category,
       description: `Generated by unmarkdown.in from ${filename}`,
+      features: { updateFields: true },
       styles: {
         default: { document: { run: { font: theme.wordFont, size: 22, color: ink }, paragraph: { spacing: { line: 330 } } } },
         paragraphStyles: [
@@ -891,9 +914,10 @@ export default function Home() {
         <label>Margins<select value={marginSize} onChange={(e) => setMarginSize(e.target.value as MarginSize)}><option value="narrow">Narrow</option><option value="normal">Professional</option><option value="wide">Wide</option></select></label>
       </div>
       <div className="setting-section"><b>Document structure</b>
-        {[["Cover page", coverPage, setCoverPage], ["Table of contents", tableOfContents, setTableOfContents], ["Numbered heading style", numberedHeadings, setNumberedHeadings], ["Running header", showHeader, setShowHeader], ["Footer", showFooter, setShowFooter], ["Page numbers", showPageNumbers, setShowPageNumbers]].map(([label, value, setter]) => <label className="toggle" key={String(label)}><span>{String(label)}</span><input type="checkbox" checked={value as boolean} onChange={(e) => (setter as (value: boolean) => void)(e.target.checked)} /></label>)}
+        {[["Cover page", coverPage, setCoverPage], ["Table of contents", tableOfContents, setTableOfContents], [`Alphabetical index (${indexTerms.length} terms)`, alphabeticalIndex, setAlphabeticalIndex], ["Numbered heading style", numberedHeadings, setNumberedHeadings], ["Running header", showHeader, setShowHeader], ["Footer", showFooter, setShowFooter], ["Page numbers", showPageNumbers, setShowPageNumbers]].map(([label, value, setter]) => <label className="toggle" key={String(label)}><span>{String(label)}</span><input type="checkbox" checked={value as boolean} onChange={(e) => (setter as (value: boolean) => void)(e.target.checked)} /></label>)}
+        <p className="brand-note">Select a term in the editor and use “Index term”. Word generates its page reference automatically.</p>
       </div>
-      <p className="setting-note">These settings are applied to the PDF preview and professional DOCX export.</p>
+      <p className="setting-note">Page settings apply to PDF and DOCX. Word generates the table of contents and alphabetical index fields.</p>
     </div>
   </aside>;
 
@@ -1031,6 +1055,17 @@ export default function Home() {
                 <button title="Insert flowchart diagram" onClick={() => insertBlock("```mermaid\nflowchart LR\n  A[Start] --> B[Review]\n  B --> C[Export]\n```")}>◇ Diagram</button>
                 <button title="Link" onClick={() => wrapSelection("[", "](https://example.com)", "link text")}>↗ Link</button>
                 <button title="Horizontal rule" onClick={() => insertBlock("---")}>— Rule</button>
+                <button title="Mark selected text for the alphabetical Word index" onClick={() => {
+                  const editor = editorRef.current;
+                  if (!editor) return;
+                  const selected = markdown.slice(editor.selectionStart, editor.selectionEnd).trim();
+                  if (!selected) { flash("Select a term in the editor first."); editor.focus(); return; }
+                  if (/\r?\n/.test(selected)) { flash("Select one term or phrase, not multiple lines."); editor.focus(); return; }
+                  const insertion = `${selected}[[index: ${selected}]]`;
+                  setMarkdown(markdown.slice(0, editor.selectionStart) + insertion + markdown.slice(editor.selectionEnd));
+                  userEditedRef.current = true;
+                  flash(`Added “${selected}” to the Word index.`);
+                }}>Index term</button>
               </div>
               <textarea ref={editorRef} aria-label="Markdown editor" value={markdown} onChange={(e) => { userEditedRef.current = true; setShowStart(false); setMarkdown(e.target.value); }} spellCheck="false" />
               {dropActive && <div className="drop-hint">Drop your .md file to load it</div>}
