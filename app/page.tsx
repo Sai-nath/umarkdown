@@ -100,6 +100,19 @@ type CssPresetKey = keyof typeof cssPresets;
 type PageSize = "a4" | "letter";
 type MarginSize = "narrow" | "normal" | "wide";
 type BrandLayout = "classic" | "letterhead" | "centered" | "executive" | "footer";
+type ImageAlign = "left" | "center" | "right";
+type DocumentImageFormat = "png" | "jpg" | "gif" | "bmp";
+type DocumentAsset = {
+  id: string;
+  src: string;
+  name: string;
+  alt: string;
+  caption: string;
+  width: number;
+  height: number;
+  displayWidth: number;
+  align: ImageAlign;
+};
 
 const brandLayouts: Record<BrandLayout, { label: string; description: string; placement: [boolean, boolean, boolean] }> = {
   classic: { label: "Classic cover", description: "Logo leads the cover", placement: [true, false, false] },
@@ -134,6 +147,27 @@ const workflowLinks = [
 
 function trackAnalytics(event: string, parameters: Record<string, string | number | boolean>) {
   window.gtag?.("event", event, parameters);
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function imageMarkdown(asset: DocumentAsset) {
+  const alt = asset.alt.replace(/\\/g, "\\\\").replace(/\]/g, "\\]");
+  const caption = asset.caption.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  const title = caption ? ` "${caption}"` : "";
+  return `![${alt}](unmarkdown-asset:${asset.id}#um:${asset.id}:${asset.displayWidth}:${asset.align}${title})`;
+}
+
+function parseImageHref(href: string) {
+  const marker = href.match(/#um:([a-z0-9-]+):(\d{1,3}):(left|center|right)$/i);
+  return {
+    src: marker?.index === undefined ? href : href.slice(0, marker.index),
+    assetId: marker?.[1] ?? "",
+    width: Math.max(20, Math.min(100, Number(marker?.[2]) || 100)),
+    align: (marker?.[3] as ImageAlign | undefined) ?? "center",
+  };
 }
 
 type BrandKit = {
@@ -239,6 +273,30 @@ async function mermaidPng(svg: string) {
   }
 }
 
+async function loadDocumentImage(href: string, displayWidth: number, assetSource?: string) {
+  const { src } = parseImageHref(href);
+  const response = await fetch(assetSource ?? src);
+  if (!response.ok) throw new Error("Image could not be loaded");
+  const blob = await response.blob();
+  const format = ({ "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/bmp": "bmp" } as const)[blob.type] as DocumentImageFormat | undefined;
+  if (!format) throw new Error("Unsupported image format");
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const image = new Image();
+    image.src = objectUrl;
+    await image.decode();
+    let width = Math.min(image.naturalWidth, Math.round(560 * displayWidth / 100));
+    let height = Math.round(image.naturalHeight * width / image.naturalWidth);
+    if (height > 680) {
+      height = 680;
+      width = Math.round(image.naturalWidth * height / image.naturalHeight);
+    }
+    return { data: new Uint8Array(await blob.arrayBuffer()), format, width, height };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export default function Home() {
   const [markdown, setMarkdown] = useState(starter);
   const [previewMarkdown, setPreviewMarkdown] = useState(starter);
@@ -249,7 +307,7 @@ export default function Home() {
   const [accentOverride, setAccentOverride] = useState("");
   const [bodySize, setBodySize] = useState(12.5);
   const [lineHeight, setLineHeight] = useState(1.72);
-  const [panel, setPanel] = useState<"settings" | "css" | "format" | null>(null);
+  const [panel, setPanel] = useState<"settings" | "css" | "format" | "assets" | null>(null);
   const [notice, setNotice] = useState("");
   const [title, setTitle] = useState("Software Requirements Specification");
   const [author, setAuthor] = useState("Product & Engineering Team");
@@ -279,8 +337,11 @@ export default function Home() {
   const [isPdfExporting, setIsPdfExporting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [docxPreviewOpen, setDocxPreviewOpen] = useState(false);
+  const [documentAssets, setDocumentAssets] = useState<DocumentAsset[]>([]);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const logoRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
   const previewTriggerRef = useRef<HTMLButtonElement>(null);
   const heroRef = useRef<HTMLElement>(null);
   const editorRef = useRef<HTMLTextAreaElement>(null);
@@ -430,9 +491,19 @@ export default function Home() {
     renderer.code = (token) => token.lang?.trim().toLowerCase() === "mermaid"
       ? `<div class="mermaid-diagram" data-source="${encodeURIComponent(token.text)}" role="img" aria-label="Diagram preview"><span>Rendering diagram...</span></div>`
       : renderCode(token);
+    renderer.image = (token) => {
+      const image = parseImageHref(token.href);
+      const source = documentAssets.find((asset) => asset.id === image.assetId)?.src ?? image.src;
+      const caption = token.title?.trim();
+      return `<figure class="document-image image-${image.align}" style="width:${image.width}%"${image.assetId ? ` data-asset-id="${escapeHtml(image.assetId)}"` : ""}><img src="${escapeHtml(source)}" alt="${escapeHtml(token.text)}">${caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : ""}</figure>`;
+    };
+    const renderParagraph = renderer.paragraph.bind(renderer);
+    renderer.paragraph = (token) => token.tokens?.length === 1 && token.tokens[0].type === "image"
+      ? `${renderer.image(token.tokens[0] as Tokens.Image)}\n`
+      : renderParagraph(token);
     const dirty = marked.parse(numberedMarkdown, { gfm: true, breaks: true, renderer }) as string;
     return typeof window === "undefined" ? dirty : DOMPurify.sanitize(dirty);
-  }, [deferredMarkdown, numberedHeadings]);
+  }, [deferredMarkdown, numberedHeadings, documentAssets]);
   const indexTerms = useMemo(() => extractIndexTerms(deferredMarkdown), [deferredMarkdown]);
   const words = useMemo(() => countWords(deferredMarkdown), [deferredMarkdown]);
   const readingTime = Math.max(1, Math.ceil(words / 220));
@@ -464,6 +535,25 @@ export default function Home() {
     });
     return () => { cancelled = true; };
   }, [html, activeAccent, theme.ink]);
+
+  useEffect(() => {
+    const images = Array.from(previewRef.current?.querySelectorAll<HTMLImageElement>(".document-image img") ?? []);
+    const cleanups = images.map((image) => {
+      const showError = () => {
+        const figure = image.closest<HTMLElement>(".document-image");
+        if (!figure || figure.classList.contains("image-error")) return;
+        figure.classList.add("image-error");
+        image.hidden = true;
+        const message = document.createElement("span");
+        message.textContent = `Image could not load${image.alt ? `: ${image.alt}` : "."}`;
+        figure.prepend(message);
+      };
+      image.addEventListener("error", showError);
+      if (image.complete && image.naturalWidth === 0) showError();
+      return () => image.removeEventListener("error", showError);
+    });
+    return () => cleanups.forEach((cleanup) => cleanup());
+  }, [html]);
 
   const flash = (message: string) => {
     setNotice(message);
@@ -613,6 +703,62 @@ export default function Home() {
     const needsBreak = end > 0 && value[end - 1] !== "\n" ? "\n\n" : end > 0 ? "\n" : "";
     const inserted = needsBreak + snippet + "\n";
     applyEdit(value.slice(0, end) + inserted + value.slice(end), end + inserted.length, end + inserted.length);
+  };
+
+  const openDocumentImage = (file?: File) => {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      flash("Please choose an image smaller than 5 MB.");
+      return;
+    }
+    if (!/^(image\/(?:png|jpeg|gif|bmp))$/.test(file.type)) {
+      flash("Please choose a PNG, JPG, GIF or BMP image.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = String(reader.result ?? "");
+      const image = new Image();
+      image.onload = () => {
+        const asset: DocumentAsset = {
+          id: crypto.randomUUID(),
+          src,
+          name: file.name,
+          alt: file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " "),
+          caption: "",
+          width: image.naturalWidth,
+          height: image.naturalHeight,
+          displayWidth: 80,
+          align: "center",
+        };
+        insertBlock(imageMarkdown(asset));
+        setDocumentAssets((current) => [...current, asset]);
+        setSelectedAssetId(asset.id);
+        setPanel("assets");
+        trackAnalytics("image_insert", { file_size_bytes: file.size, image_format: file.type });
+        flash("Image inserted. Adjust its size, alignment and caption here.");
+      };
+      image.onerror = () => flash("That image could not be read.");
+      image.src = src;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const updateDocumentAsset = (id: string, updates: Partial<Pick<DocumentAsset, "alt" | "caption" | "displayWidth" | "align">>) => {
+    const asset = documentAssets.find((item) => item.id === id);
+    if (!asset) return;
+    const updated = { ...asset, ...updates };
+    setMarkdown((current) => current.replace(imageMarkdown(asset), imageMarkdown(updated)));
+    setDocumentAssets((current) => current.map((item) => item.id === id ? updated : item));
+  };
+
+  const removeDocumentAsset = (id: string) => {
+    const asset = documentAssets.find((item) => item.id === id);
+    if (!asset) return;
+    setMarkdown((current) => current.replace(imageMarkdown(asset), ""));
+    setDocumentAssets((current) => current.filter((item) => item.id !== id));
+    setSelectedAssetId((current) => current === id ? null : current);
+    flash("Image removed from the document.");
   };
 
   const startWriting = () => {
@@ -778,6 +924,17 @@ export default function Home() {
         if (numberedHeadings && token.depth === 2) { sectionNumber += 1; subsectionNumber = 0; headingText = `${sectionNumber}. ${cleanHeading}`; }
         if (numberedHeadings && token.depth === 3) { subsectionNumber += 1; headingText = `${sectionNumber}.${subsectionNumber} ${cleanHeading}`; }
         children.push(new Paragraph({ children: indexedRuns(headingText), heading: level, spacing: { before: token.depth === 1 ? 0 : 300, after: 120 }, keepNext: true }));
+      } else if (token.type === "paragraph" && token.tokens?.length === 1 && token.tokens[0].type === "image") {
+        const imageToken = token.tokens[0];
+        const imageMeta = parseImageHref(imageToken.href);
+        const imageAlignment = imageMeta.align === "left" ? AlignmentType.LEFT : imageMeta.align === "right" ? AlignmentType.RIGHT : AlignmentType.CENTER;
+        try {
+          const image = await loadDocumentImage(imageToken.href, imageMeta.width, documentAssets.find((asset) => asset.id === imageMeta.assetId)?.src);
+          children.push(new Paragraph({ alignment: imageAlignment, children: [new ImageRun({ data: image.data, transformation: { width: image.width, height: image.height }, type: image.format })], spacing: { before: 180, after: imageToken.title ? 70 : 220 }, keepNext: Boolean(imageToken.title) }));
+          if (imageToken.title) children.push(new Paragraph({ alignment: imageAlignment, children: [run(imageToken.title, { italics: true, color: "747A80" })], spacing: { after: 220 } }));
+        } catch {
+          children.push(new Paragraph({ children: [run(`Image could not be embedded: ${imageToken.text || imageMeta.src}`, { italics: true, color: "747A80" })], spacing: { after: 180 } }));
+        }
       } else if (token.type === "paragraph" || token.type === "text") {
         children.push(new Paragraph({ children: indexedRuns(plainText(token)), spacing: { after: 180, line: 330 }, widowControl: true }));
       } else if (token.type === "blockquote") {
@@ -978,6 +1135,29 @@ export default function Home() {
     </div>
   </aside>;
 
+  const selectedAsset = documentAssets.find((asset) => asset.id === selectedAssetId) ?? null;
+  const assetsPanel = <aside className="inspector-pane assets-pane">
+    <div className="pane-label"><span>IMAGES &amp; ASSETS</span><button onClick={() => setPanel(null)}>×</button></div>
+    <div className="inspector-scroll">
+      <button className="asset-upload" onClick={() => imageRef.current?.click()}><b>+ Insert document image</b><small>PNG, JPG, GIF or BMP · private in your browser · under 5 MB</small></button>
+      {documentAssets.length ? <div className="asset-list" aria-label="Document images">
+        {documentAssets.map((asset) => <button key={asset.id} className={selectedAssetId === asset.id ? "selected" : ""} onClick={() => setSelectedAssetId(asset.id)}>
+          <img src={asset.src} alt=""/><span><b>{asset.name}</b><small>{asset.width} × {asset.height}px · {asset.displayWidth}%</small></span>
+        </button>)}
+      </div> : <div className="asset-empty"><b>No document images yet</b><p>Insert an image, then control its size, alignment, description and caption here.</p></div>}
+      {selectedAsset && <div className="asset-controls">
+        <div className="style-section-title"><span>Selected image</span><button className="asset-remove" onClick={() => removeDocumentAsset(selectedAsset.id)}>Remove</button></div>
+        <label>Alternative text<input value={selectedAsset.alt} onChange={(event) => updateDocumentAsset(selectedAsset.id, { alt: event.target.value })} placeholder="Describe the image" /></label>
+        <label>Caption<input value={selectedAsset.caption} onChange={(event) => updateDocumentAsset(selectedAsset.id, { caption: event.target.value })} placeholder="Optional figure caption" /></label>
+        <label className="range-control"><span>Image width <b>{selectedAsset.displayWidth}%</b></span><input aria-label="Image width" type="range" min="20" max="100" step="5" value={selectedAsset.displayWidth} onChange={(event) => updateDocumentAsset(selectedAsset.id, { displayWidth: Number(event.target.value) })} /></label>
+        <label>Alignment</label><div className="segmented" role="group" aria-label="Image alignment">
+          {(["left", "center", "right"] as ImageAlign[]).map((align) => <button key={align} className={selectedAsset.align === align ? "selected" : ""} aria-pressed={selectedAsset.align === align} onClick={() => updateDocumentAsset(selectedAsset.id, { align })}>{align[0].toUpperCase() + align.slice(1)}</button>)}
+        </div>
+        <p className="brand-note">Click an image in the document preview to return to these controls.</p>
+      </div>}
+    </div>
+  </aside>;
+
   return (
     <main>
       <nav className="nav shell">
@@ -1060,6 +1240,7 @@ export default function Home() {
               <button className={panel === "format" ? "active" : ""} onClick={() => setPanel(panel === "format" ? null : "format")}>⊞ Format</button>
               <button className={panel === "settings" ? "active" : ""} onClick={() => setPanel(panel === "settings" ? null : "settings")}>⚙ Company &amp; document</button>
               <button className={panel === "css" ? "active" : ""} onClick={() => setPanel(panel === "css" ? null : "css")}>✦ Style Lab</button>
+              <button className={panel === "assets" ? "active" : ""} onClick={() => setPanel(panel === "assets" ? null : "assets")}>▧ Images{documentAssets.length ? ` · ${documentAssets.length}` : ""}</button>
               <span className="divider"/><button ref={previewTriggerRef} onClick={openDocxPreview}>▣ Preview DOCX</button><button disabled={isPdfExporting} onClick={exportPdf}>{isPdfExporting ? "Building PDF…" : "↓ PDF"}</button><button className="export" disabled={isExporting} onClick={exportDocx}>{isExporting ? "Building DOCX…" : "↓ Professional DOCX"}</button>
             </div>
           </div>
@@ -1142,7 +1323,13 @@ export default function Home() {
                       <em className="cover-hint">Click any line to edit</em>
                     </section>}
                     {coverPage && runningHeader}
-                    <article className={`document-preview theme-${themeKey} ${numberedHeadings ? "numbered-headings" : ""}`} dangerouslySetInnerHTML={{ __html: html }} />
+                    <article className={`document-preview theme-${themeKey} ${numberedHeadings ? "numbered-headings" : ""}`} onClick={(event) => {
+                      if (docxPreviewOpen) return;
+                      const assetId = (event.target as HTMLElement).closest<HTMLElement>("[data-asset-id]")?.dataset.assetId;
+                      if (!assetId || !documentAssets.some((asset) => asset.id === assetId)) return;
+                      setSelectedAssetId(assetId);
+                      setPanel("assets");
+                    }} dangerouslySetInnerHTML={{ __html: html }} />
                     {showFooter && <div className="paper-footer"><span className="footer-brand">{logo && logoInFooter && <img className="footer-logo" src={logo.src} alt="" />}<span>{resolvedFooterText}</span></span><span className="footer-document">{title}</span>{showPageNumbers && <span className="footer-page">01</span>}</div>}
                   </div>
                 </div>
@@ -1151,6 +1338,7 @@ export default function Home() {
             {panel === "settings" && settingsPanel}
             {panel === "css" && styleLabPanel}
             {panel === "format" && formatPanel}
+            {panel === "assets" && assetsPanel}
           </div>
         </div>
       </section>
@@ -1203,6 +1391,7 @@ export default function Home() {
       </footer>
       <input ref={fileRef} className="sr-only" type="file" accept=".md,text/markdown,text/plain" onChange={(e) => openFile(e.target.files?.[0])}/>
       <input ref={logoRef} className="sr-only" type="file" accept="image/png,image/jpeg,image/gif,image/bmp" onChange={(e) => { openLogo(e.target.files?.[0]); e.target.value = ""; }}/>
+      <input ref={imageRef} className="sr-only" type="file" accept="image/png,image/jpeg,image/gif,image/bmp" onChange={(e) => { openDocumentImage(e.target.files?.[0]); e.target.value = ""; }}/>
       <style>{`${customCss}\n@media print { @page { size: ${pageSize === "a4" ? "A4" : "Letter"}; margin: ${padding}; } }`}</style>
       {notice && <div className="toast" role="status">{notice}</div>}
     </main>

@@ -164,6 +164,13 @@ test("detects legal Markdown and exposes unrestricted styling", async () => {
   assert.match(page, /renderMermaidSvg/);
   assert.match(page, /Promise\.all\(diagrams\.map/);
   assert.match(page, /Diagram renderer could not load/);
+  assert.match(page, /IMAGES &amp; ASSETS/);
+  assert.match(page, /Insert document image/);
+  assert.match(page, /imageMarkdown/);
+  assert.match(page, /#um:/);
+  assert.match(page, /loadDocumentImage/);
+  assert.match(page, /image_insert/);
+  assert.match(page, /image\/png,image\/jpeg,image\/gif,image\/bmp/);
   assert.match(page, /file\.size > 5 \* 1024 \* 1024/);
   assert.match(page, /onPaste=\{pasteMarkdown\}/);
   assert.match(page, /clipboardData\.getData\("text\/plain"\)/);
@@ -201,4 +208,7 @@ test("detects legal Markdown and exposes unrestricted styling", async () => {
   assert.ok(page.indexOf("technical specification") < page.indexOf("/privacy|terms|policy|agreement|legal|cookie/"));
   const presetBlock = page.slice(page.indexOf("const cssPresets"), page.indexOf("type ThemeKey"));
   assert.ok((presetBlock.match(/description:/g) ?? []).length >= 16);
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /\.document-image/);
+  assert.match(css, /\.asset-upload/);
 });
