@@ -104,15 +104,19 @@ test("publishes every landing page in the sitemap and exposes the IndexNow key",
 test("keeps useful AI prompts on the SRS and architecture pages", async () => {
   const srs = await (await render("/srs-document-generator")).text();
   assert.match(srs, /Copy complete prompt/);
+  assert.match(srs, /OUTPUT CONTRACT/);
+  assert.match(srs, /MARKDOWN TOOLKIT/);
   assert.match(srs, /FR-001/);
   assert.match(srs, /traceability table/);
-  assert.match(srs, /Do not invent business rules/);
+  assert.match(srs, /Build a review-ready Software Requirements Specification/);
 
   const architecture = await (await render("/architecture-document-template")).text();
   assert.match(architecture, /Copy complete prompt/);
+  assert.match(architecture, /OUTPUT CONTRACT/);
+  assert.match(architecture, /MARKDOWN TOOLKIT/);
   assert.match(architecture, /ADR-001/);
   assert.match(architecture, /Mermaid diagrams/);
-  assert.match(architecture, /Do not invent services/);
+  assert.match(architecture, /Build a practical software architecture document/);
 });
 
 test("offers an AI prompt and preloaded studio path on every search page", async () => {
@@ -125,6 +129,9 @@ test("offers an AI prompt and preloaded studio path on every search page", async
   const home = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(home, /landing_sample_opened/);
   assert.match(home, /URLSearchParams/);
+  assert.match(home, /buildDocumentPrompt\(themeKey\)/);
+  const seoPages = await readFile(new URL("../app/seo-pages.ts", import.meta.url), "utf8");
+  assert.equal((seoPages.match(/text: buildDocumentPrompt\(/g) ?? []).length, 6);
 });
 
 test("detects legal Markdown and exposes unrestricted styling", async () => {
@@ -166,14 +173,15 @@ test("detects legal Markdown and exposes unrestricted styling", async () => {
   assert.match(page, /docx_preview/);
   assert.match(page, /Close DOCX preview/);
   assert.match(page, /\/markdown-to-word/);
-  assert.match(page, /OUTPUT CONTRACT/);
-  assert.match(page, /MARKDOWN TOOLKIT/);
-  assert.match(page, /FINAL QUALITY CHECK/);
-  assert.match(page, /fenced `mermaid` block/);
-  assert.match(page, /\[TBD: specific information needed\]/);
-  assert.match(page, /traceability table/);
-  assert.match(page, /ADR table/);
-  assert.match(page, /Cite only sources supplied/);
+  const prompts = await readFile(new URL("../app/document-prompts.ts", import.meta.url), "utf8");
+  assert.match(prompts, /OUTPUT CONTRACT/);
+  assert.match(prompts, /MARKDOWN TOOLKIT/);
+  assert.match(prompts, /FINAL QUALITY CHECK/);
+  assert.match(prompts, /fenced `mermaid` block/);
+  assert.match(prompts, /\[TBD: specific information needed\]/);
+  assert.match(prompts, /traceability table/);
+  assert.match(prompts, /ADR table/);
+  assert.match(prompts, /Cite only sources supplied/);
   assert.doesNotMatch(page, /window\.print/);
   assert.doesNotMatch(page, /＋ Upload \.md|↑ Upload \.md/);
   assert.ok(page.indexOf("technical specification") < page.indexOf("/privacy|terms|policy|agreement|legal|cookie/"));
