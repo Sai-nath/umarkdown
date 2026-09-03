@@ -437,7 +437,7 @@ export default function Home() {
         if (typeof saved.logoOnCover === "boolean") setLogoOnCover(saved.logoOnCover);
         if (typeof saved.logoInHeader === "boolean") setLogoInHeader(saved.logoInHeader);
         if (typeof saved.logoInFooter === "boolean") setLogoInFooter(saved.logoInFooter);
-        if (typeof saved.logoScale === "number") setLogoScale(Math.max(60, Math.min(160, saved.logoScale)));
+        if (typeof saved.logoScale === "number") setLogoScale(Math.max(50, Math.min(220, saved.logoScale)));
         else if (saved.logoSize) setLogoScale(saved.logoSize === "small" ? 72 : saved.logoSize === "large" ? 130 : 100);
         if (saved.brandLayout && Object.prototype.hasOwnProperty.call(brandLayouts, saved.brandLayout)) setBrandLayout(saved.brandLayout);
         if (saved.logo && /^data:image\/(?:png|jpeg|gif|bmp);base64,/i.test(saved.logo.src) && saved.logo.width > 0 && saved.logo.height > 0) setLogo(saved.logo);
@@ -744,8 +744,9 @@ export default function Home() {
     const logoImage = (targetHeight: number, maxWidth: number) => {
       let height = Math.min(Math.round(targetHeight * logoScaleFactor), logo!.height);
       let width = Math.round(logo!.width * (height / logo!.height));
-      if (width > maxWidth) {
-        width = maxWidth;
+      const scaledMaxWidth = Math.round(maxWidth * logoScaleFactor);
+      if (width > scaledMaxWidth) {
+        width = scaledMaxWidth;
         height = Math.round(logo!.height * (width / logo!.width));
       }
       return new ImageRun({ data: logoData!, transformation: { width, height }, type: logo!.format });
@@ -755,18 +756,18 @@ export default function Home() {
     const footerAlignment = brandLayout === "centered" ? AlignmentType.CENTER : brandLayout === "classic" ? AlignmentType.RIGHT : AlignmentType.LEFT;
     const headerText = brandLayout === "classic" ? `${organization}  /  ${title}` : brandLayout === "footer" ? `${title}  /  ${classification}` : `${organization}  /  ${title}  /  ${classification} · V${version}`;
     const headerContent = [
-      ...(logo && logoInHeader && brandLayout !== "executive" ? [logoImage(22, 120), run("   ")] : []),
+      ...(logo && logoInHeader && brandLayout !== "executive" ? [logoImage(30, 170), run("   ")] : []),
       run(headerText, { bold: true, color: "6C737A" }),
-      ...(logo && logoInHeader && brandLayout === "executive" ? [run("   "), logoImage(22, 120)] : []),
+      ...(logo && logoInHeader && brandLayout === "executive" ? [run("   "), logoImage(30, 170)] : []),
     ];
     const footerContent = [
-      ...(logo && logoInFooter ? [logoImage(16, 90), run("   ")] : []),
+      ...(logo && logoInFooter ? [logoImage(22, 130), run("   ")] : []),
       run(resolvedFooterText, { color: "747A80" }),
       ...(showPageNumbers ? [run("   •   ", { color: "747A80" }), new TextRun({ children: [PageNumber.CURRENT], font: theme.wordFont, size: 18, color: "747A80" })] : []),
     ];
 
     if (coverPage) {
-      if (coverLogo) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 700, after: 200 }, children: [logoImage(52, 220)] }));
+      if (coverLogo) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 700, after: 200 }, children: [logoImage(76, 280)] }));
       children.push(
         new Paragraph({ text: organization.toUpperCase(), alignment: AlignmentType.CENTER, spacing: { before: coverLogo ? 200 : 900, after: 700 }, style: "CoverEyebrow" }),
         new Paragraph({ text: title, alignment: AlignmentType.CENTER, style: "CoverTitle", spacing: { after: 320 } }),
@@ -934,7 +935,7 @@ export default function Home() {
               </button>)}
             </div>
             <label>Show logo in</label><div className="logo-placement">{[["Cover", logoOnCover, setLogoOnCover], ["Header", logoInHeader, setLogoInHeader], ["Footer", logoInFooter, setLogoInFooter]].map(([label, value, setter]) => <button key={String(label)} className={value ? "selected" : ""} aria-pressed={value as boolean} onClick={() => (setter as (value: boolean) => void)(!value)}>{String(label)}</button>)}</div>
-            <label className="logo-size-control"><span>Logo size <b>{logoScale}%</b></span><input aria-label="Logo size" type="range" min="60" max="160" step="5" value={logoScale} onChange={(e) => setLogoScale(Number(e.target.value))} /></label>
+            <label className="logo-size-control"><span>Logo size <b>{logoScale}%</b></span><input aria-label="Logo size" type="range" min="50" max="220" step="5" value={logoScale} onChange={(e) => setLogoScale(Number(e.target.value))} /></label>
           </div>
         </> : <button className="logo-upload" onClick={() => logoRef.current?.click()}><b>Upload company logo</b><small>PNG, JPG, GIF or BMP · under 2 MB</small></button>}
         <label>Company details / footer<input value={footerText} placeholder={`${organization} · ${classification}`} onChange={(e) => setFooterText(e.target.value)} /></label>
