@@ -121,6 +121,9 @@ a { color: inherit; text-decoration: none; }
 .studio-wrap.light .brand-layout-preview { border-color: #d3ccc2; }
 .studio-wrap.light .setting-section .logo-size-control input[type="range"] { background: #d3ccc2; }
 .studio-wrap.light .logo-row img { border-color: #d3ccc2; }
+.studio-wrap.light .logo-row > span b { color: #292421; }
+.studio-wrap.light .logo-upload { background: #fffdf9; border-color: #c7bdb2; color: #292421; }
+.studio-wrap.light .logo-upload:hover { border-color: #9f3058; }
 .studio-wrap.light .style-intro { background: linear-gradient(135deg, #f6eee8, #f3eee6); border-color: #e7e0d4; }
 .studio-wrap.light .style-intro b { color: #292421; }
 .studio-wrap.light .style-intro p { color: #766e68; }
@@ -242,8 +245,18 @@ a { color: inherit; text-decoration: none; }
 .logo-add:hover { color: var(--plum); border-color: var(--plum); }
 .logo-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
 .logo-row img { max-height: 30px; max-width: 110px; object-fit: contain; padding: 4px 8px; border: 1px solid #4e4945; border-radius: 3px; background: #fffdf9; }
+.logo-row > span { min-width: 0; flex: 1; }
+.logo-row > span b, .logo-row > span small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logo-row > span b { color: #e1dcd7; font-size: 9px; }
+.logo-row > span small { margin-top: 3px; color: #817a75; font-size: 7px; }
 .logo-row button { padding: 9px 12px; border: 1px solid #4e4945; border-radius: 3px; background: #1c1a18; color: #c5beb9; font-size: 9px; cursor: pointer; transition: border-color .2s ease, color .2s ease; }
 .logo-row button:hover { border-color: #b3587a; color: white; }
+.logo-row button.logo-remove { width: 28px; height: 28px; padding: 0; font-size: 15px; }
+.logo-upload { width: 100%; display: grid; gap: 4px; margin-top: 6px; padding: 13px; border: 1px dashed #5e5752; border-radius: 4px; background: #1c1a18; color: #d6cfca; cursor: pointer; text-align: left; }
+.logo-upload:hover { border-color: #b3587a; }
+.logo-upload b { font-size: 9px; }
+.logo-upload small { color: #817a75; font-size: 7px; }
+.logo-customization { margin-top: 14px; padding-top: 2px; }
 .logo-placement { display: flex; gap: 5px; margin-top: 8px; }
 .logo-placement button { flex: 1; padding: 8px 6px; border: 1px solid #4e4945; border-radius: 3px; background: #1c1a18; color: #928b86; font-size: 9px; cursor: pointer; transition: border-color .2s ease, background .2s ease, color .2s ease; }
 .logo-placement button.selected { border-color: #b3587a; background: #593044; color: white; }
@@ -339,7 +352,7 @@ a { color: inherit; text-decoration: none; }
 .brand-layout-preview .mini-logo { width: 9px; height: 6px; background: #a13d63; }
 .brand-layout-preview .mini-name { width: 18px; }
 .brand-layout-preview .mini-detail { width: 11px; }
-.brand-layout-preview .mini-page { right: 4px; bottom: 3px; width: 3px; height: 3px; border-radius: 50%; background: #77706a; }
+.brand-layout-preview .mini-number { right: 4px; bottom: 3px; width: 3px; height: 3px; border-radius: 50%; background: #77706a; }
 .layout-classic .mini-logo { top: 5px; left: 19px; }
 .layout-classic .mini-name { top: 15px; left: 15px; }
 .layout-classic .mini-detail { top: 21px; left: 18px; }

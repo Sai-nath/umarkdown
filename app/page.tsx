@@ -586,6 +586,7 @@ export default function Home() {
       const img = new Image();
       img.onload = () => {
         setLogo({ src, width: img.naturalWidth, height: img.naturalHeight, format });
+        setPanel("settings");
         flash("Logo added. Choose a brand layout and size.");
       };
       img.src = src;
@@ -922,16 +923,20 @@ export default function Home() {
         <label>Organization<input value={organization} onChange={(e) => setOrganization(e.target.value)} /></label>
         <label>Brand colour<div className="brand-color"><input aria-label="Brand colour" type="color" value={activeAccent} onChange={(e) => setAccentOverride(e.target.value)} /><button onClick={() => setAccentOverride("")}>Use theme colour</button></div></label>
         <label>Company logo</label>
-        <div className="logo-row">{logo ? <><img src={logo.src} alt="Logo preview" /><button onClick={() => setLogo(null)}>Remove</button></> : <button onClick={() => logoRef.current?.click()}>Upload logo</button>}</div>
-        <label>Brand layout</label>
-        <div className="brand-layout-grid" role="radiogroup" aria-label="Brand layout">
-          {brandLayoutKeys.map((key) => <button key={key} role="radio" aria-checked={brandLayout === key} className={brandLayout === key ? "selected" : ""} onClick={() => applyBrandLayout(key)}>
-            <span className={`brand-layout-preview layout-${key}`} aria-hidden="true"><i className="mini-logo"/><i className="mini-name"/><i className="mini-detail"/><i className="mini-page"/></span>
-            <span><b>{brandLayouts[key].label}</b><small>{brandLayouts[key].description}</small></span>
-          </button>)}
-        </div>
-        {logo && <><label>Show logo in</label><div className="logo-placement">{[["Cover", logoOnCover, setLogoOnCover], ["Header", logoInHeader, setLogoInHeader], ["Footer", logoInFooter, setLogoInFooter]].map(([label, value, setter]) => <button key={String(label)} className={value ? "selected" : ""} aria-pressed={value as boolean} onClick={() => (setter as (value: boolean) => void)(!value)}>{String(label)}</button>)}</div></>}
-        {logo && <label className="logo-size-control"><span>Logo size <b>{logoScale}%</b></span><input aria-label="Logo size" type="range" min="60" max="160" step="5" value={logoScale} onChange={(e) => setLogoScale(Number(e.target.value))} /></label>}
+        {logo ? <>
+          <div className="logo-row"><img src={logo.src} alt="Logo preview" /><span><b>Logo ready</b><small>{logo.width} × {logo.height}px</small></span><button onClick={() => logoRef.current?.click()}>Replace</button><button className="logo-remove" aria-label="Remove logo" title="Remove logo" onClick={() => setLogo(null)}>×</button></div>
+          <div className="logo-customization">
+            <label>Brand layout</label>
+            <div className="brand-layout-grid" role="radiogroup" aria-label="Brand layout">
+              {brandLayoutKeys.map((key) => <button key={key} role="radio" aria-checked={brandLayout === key} className={brandLayout === key ? "selected" : ""} onClick={() => applyBrandLayout(key)}>
+                <span className={`brand-layout-preview layout-${key}`} aria-hidden="true"><i className="mini-logo"/><i className="mini-name"/><i className="mini-detail"/><i className="mini-number"/></span>
+                <span><b>{brandLayouts[key].label}</b><small>{brandLayouts[key].description}</small></span>
+              </button>)}
+            </div>
+            <label>Show logo in</label><div className="logo-placement">{[["Cover", logoOnCover, setLogoOnCover], ["Header", logoInHeader, setLogoInHeader], ["Footer", logoInFooter, setLogoInFooter]].map(([label, value, setter]) => <button key={String(label)} className={value ? "selected" : ""} aria-pressed={value as boolean} onClick={() => (setter as (value: boolean) => void)(!value)}>{String(label)}</button>)}</div>
+            <label className="logo-size-control"><span>Logo size <b>{logoScale}%</b></span><input aria-label="Logo size" type="range" min="60" max="160" step="5" value={logoScale} onChange={(e) => setLogoScale(Number(e.target.value))} /></label>
+          </div>
+        </> : <button className="logo-upload" onClick={() => logoRef.current?.click()}><b>Upload company logo</b><small>PNG, JPG, GIF or BMP · under 2 MB</small></button>}
         <label>Company details / footer<input value={footerText} placeholder={`${organization} · ${classification}`} onChange={(e) => setFooterText(e.target.value)} /></label>
         <div className="brand-actions"><button onClick={saveBrandKit}>Save company style</button><button onClick={forgetBrandKit}>Forget saved</button></div>
         <p className="brand-note">Saved only in this browser. Logos must be under 2 MB.</p>

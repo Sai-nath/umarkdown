@@ -146,6 +146,9 @@ test("detects legal Markdown and exposes unrestricted styling", async () => {
   assert.match(page, /Footer mark/);
   assert.match(page, /Logo size/);
   assert.match(page, /brandLayout/);
+  assert.match(page, /Upload company logo/);
+  assert.match(page, /mini-number/);
+  assert.match(page, /setPanel\("settings"\)/);
   assert.match(page, /showFooter/);
   assert.match(page, /flowchart LR/);
   assert.match(page, /renderMermaidSvg/);
