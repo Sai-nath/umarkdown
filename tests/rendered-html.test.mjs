@@ -184,6 +184,8 @@ test("detects legal Markdown and exposes unrestricted styling", async () => {
   assert.match(prompts, /FINAL QUALITY CHECK/);
   assert.match(prompts, /fenced `mermaid` block/);
   assert.match(prompts, /\[\[index: Term\]\]/);
+  assert.match(prompts, /separate alphabetical Index page/);
+  assert.match(prompts, /final Index page and page references/);
   assert.match(prompts, /\[TBD: specific information needed\]/);
   assert.match(prompts, /traceability table/);
   assert.match(prompts, /ADR table/);

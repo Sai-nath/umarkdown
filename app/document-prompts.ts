@@ -8,7 +8,7 @@ const promptCore = [
   "- Use exactly one `#` H1 for the document title, then sequential `##` and `###` headings without skipping levels.",
   "- Keep paragraphs concise, sections complete, terminology consistent, and the hierarchy easy to scan.",
   "- Never invent facts, metrics, quotations, requirements, URLs, or citations. Mark missing inputs as `[TBD: specific information needed]`.",
-  "- Do not add HTML, manual page numbers, a manually typed table of contents, base64 data, or decorative filler.",
+  "- Do not add HTML, manual page numbers, a manually typed table of contents, base64 data, or decorative filler. Unmarkdown generates pagination and the table of contents from the heading structure.",
   "",
   "MARKDOWN TOOLKIT — use each feature only when it improves the document",
   "- `**bold**` for labels or key terms, `_italic_` for light emphasis, and `~~strikethrough~~` only for explicit revisions.",
@@ -18,7 +18,7 @@ const promptCore = [
   "- Fenced code blocks with a language tag such as `json`, `yaml`, `bash`, `typescript`, or `sql`; never use a fence around the whole document.",
   "- Mermaid diagrams in a fenced `mermaid` block when a flow, sequence, architecture, state, or dependency diagram adds real value.",
   "- Descriptive links as `[label](https://example.com)` and `---` rules only between major document parts.",
-  "- Mark important terms at their first relevant mention with `[[index: Term]]`. Use `[[index: Primary term: Subentry]]` for a nested alphabetical index entry, and do not mark the same occurrence twice.",
+  "- Prepare a separate alphabetical Index page by marking important terms at their first relevant mention with `[[index: Term]]`. Use `[[index: Primary term: Subentry]]` for a nested entry. Do not type an Index heading, page numbers, or the index list yourself; Unmarkdown generates the final Index page and page references during Word export.",
   "- Escape Markdown control characters when they are meant to appear literally.",
 ].join("\n");
 
