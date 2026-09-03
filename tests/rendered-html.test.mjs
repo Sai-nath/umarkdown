@@ -163,6 +163,10 @@ test("detects legal Markdown and exposes unrestricted styling", async () => {
   assert.match(page, /flowchart LR/);
   assert.match(page, /renderMermaidSvg/);
   assert.match(page, /file\.size > 5 \* 1024 \* 1024/);
+  assert.match(page, /onPaste=\{pasteMarkdown\}/);
+  assert.match(page, /clipboardData\.getData\("text\/plain"\)/);
+  assert.match(page, /countWords\(deferredMarkdown\)/);
+  assert.doesNotMatch(page, /markdown\.trim\(\)\.split\(\/\\s\+\//);
   assert.match(page, /isExporting/);
   assert.match(page, /import\("html2pdf\.js"\)/);
   assert.match(page, /paperRef/);

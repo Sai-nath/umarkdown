@@ -114,6 +114,15 @@ declare global {
   interface Window { gtag?: (...args: unknown[]) => void; }
 }
 
+const LARGE_MARKDOWN_THRESHOLD = 50_000;
+
+function countWords(value: string) {
+  let count = 0;
+  const words = /\S+/g;
+  while (words.exec(value)) count += 1;
+  return count;
+}
+
 const workflowLinks = [
   ["Markdown to Word", "/markdown-to-word"],
   ["Markdown to PDF", "/markdown-to-pdf"],
@@ -227,6 +236,7 @@ async function mermaidPng(svg: string) {
 
 export default function Home() {
   const [markdown, setMarkdown] = useState(starter);
+  const [previewMarkdown, setPreviewMarkdown] = useState(starter);
   const [filename, setFilename] = useState("software-requirements.md");
   const [themeKey, setThemeKey] = useState<ThemeKey>("srs");
   const [customCss, setCustomCss] = useState(".document-preview h1 { letter-spacing: -0.035em; }\n.document-preview table { break-inside: avoid; }");
@@ -273,6 +283,14 @@ export default function Home() {
   const paperRef = useRef<HTMLDivElement>(null);
   const userEditedRef = useRef(false);
   const [dropActive, setDropActive] = useState(false);
+
+  useEffect(() => {
+    const id = window.setTimeout(
+      () => setPreviewMarkdown(markdown),
+      markdown.length >= LARGE_MARKDOWN_THRESHOLD ? 350 : 0,
+    );
+    return () => window.clearTimeout(id);
+  }, [markdown]);
 
   const loadSample = async (key: ThemeKey) => {
     try {
@@ -397,21 +415,21 @@ export default function Home() {
     hero.style.setProperty("--my", String((event.clientY - rect.top) / rect.height - 0.5));
   };
 
-  const deferredMarkdown = useDeferredValue(markdown);
-  const isRendering = deferredMarkdown !== markdown;
+  const deferredMarkdown = useDeferredValue(previewMarkdown);
+  const isRendering = previewMarkdown !== markdown || deferredMarkdown !== previewMarkdown;
   const html = useMemo(() => {
     const cleanMarkdown = stripIndexMarkers(deferredMarkdown);
-    const previewMarkdown = numberedHeadings ? cleanMarkdown.replace(/^(#{2,3})\s+\d+(?:\.\d+)*\.?\s+/gm, "$1 ") : cleanMarkdown;
+    const numberedMarkdown = numberedHeadings ? cleanMarkdown.replace(/^(#{2,3})\s+\d+(?:\.\d+)*\.?\s+/gm, "$1 ") : cleanMarkdown;
     const renderer = new Renderer();
     const renderCode = renderer.code.bind(renderer);
     renderer.code = (token) => token.lang?.trim().toLowerCase() === "mermaid"
       ? `<div class="mermaid-diagram" data-source="${encodeURIComponent(token.text)}" role="img" aria-label="Diagram preview"><span>Rendering diagram...</span></div>`
       : renderCode(token);
-    const dirty = marked.parse(previewMarkdown, { gfm: true, breaks: true, renderer }) as string;
+    const dirty = marked.parse(numberedMarkdown, { gfm: true, breaks: true, renderer }) as string;
     return typeof window === "undefined" ? dirty : DOMPurify.sanitize(dirty);
   }, [deferredMarkdown, numberedHeadings]);
   const indexTerms = useMemo(() => extractIndexTerms(deferredMarkdown), [deferredMarkdown]);
-  const words = markdown.trim() ? markdown.trim().split(/\s+/).length : 0;
+  const words = useMemo(() => countWords(deferredMarkdown), [deferredMarkdown]);
   const readingTime = Math.max(1, Math.ceil(words / 220));
   const padding = marginSize === "narrow" ? "42px" : marginSize === "wide" ? "88px" : "68px";
 
@@ -557,6 +575,17 @@ export default function Home() {
       el.focus();
       el.setSelectionRange(selectionStart, selectionEnd);
     });
+  };
+  const pasteMarkdown = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pastedText = event.clipboardData.getData("text/plain");
+    if (!pastedText) return;
+    event.preventDefault();
+    const { selectionStart, selectionEnd, value } = event.currentTarget;
+    const cursor = selectionStart + pastedText.length;
+    applyEdit(value.slice(0, selectionStart) + pastedText + value.slice(selectionEnd), cursor, cursor);
+    if (pastedText.length >= LARGE_MARKDOWN_THRESHOLD) {
+      flash(`Pasted ${pastedText.length.toLocaleString()} characters. Full document kept; preview is catching up.`);
+    }
   };
   const wrapSelection = (before: string, after = before, placeholder = "text") => {
     const el = editorRef.current;
@@ -1067,7 +1096,7 @@ export default function Home() {
                   flash(`Added “${selected}” to the Word index.`);
                 }}>Index term</button>
               </div>
-              <textarea ref={editorRef} aria-label="Markdown editor" value={markdown} onChange={(e) => { userEditedRef.current = true; setShowStart(false); setMarkdown(e.target.value); }} spellCheck="false" />
+              <textarea ref={editorRef} aria-label="Markdown editor" value={markdown} onPaste={pasteMarkdown} onChange={(e) => { userEditedRef.current = true; setShowStart(false); setMarkdown(e.target.value); }} spellCheck="false" />
               {dropActive && <div className="drop-hint">Drop your .md file to load it</div>}
             </section>
             <section className={`preview-pane ${docxPreviewOpen ? "docx-preview-fullscreen" : ""}`} role={docxPreviewOpen ? "dialog" : undefined} aria-modal={docxPreviewOpen || undefined} aria-label={docxPreviewOpen ? "Full-screen DOCX preview" : undefined}>
