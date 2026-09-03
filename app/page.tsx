@@ -197,7 +197,7 @@ function plainText(token: Tokens.Generic): string {
 
 let diagramId = 0;
 
-async function renderMermaidSvg(source: string, accent: string, ink: string) {
+async function getMermaidRenderer(accent: string, ink: string) {
   const { default: mermaid } = await import("mermaid");
   mermaid.initialize({
     startOnLoad: false,
@@ -205,6 +205,11 @@ async function renderMermaidSvg(source: string, accent: string, ink: string) {
     theme: "base",
     themeVariables: { primaryColor: `${accent}22`, primaryBorderColor: accent, primaryTextColor: ink, lineColor: accent, fontFamily: "Arial, sans-serif" },
   });
+  return mermaid;
+}
+
+async function renderMermaidSvg(source: string, accent: string, ink: string) {
+  const mermaid = await getMermaidRenderer(accent, ink);
   return (await mermaid.render(`unmarkdown-diagram-${++diagramId}`, source)).svg;
 }
 
@@ -438,9 +443,10 @@ export default function Home() {
     if (!diagrams.length) return;
     let cancelled = false;
     void (async () => {
-      for (const diagram of diagrams) {
+      const mermaid = await getMermaidRenderer(activeAccent, theme.ink);
+      await Promise.all(diagrams.map(async (diagram) => {
         try {
-          const svg = await renderMermaidSvg(decodeURIComponent(diagram.dataset.source ?? ""), activeAccent, theme.ink);
+          const svg = (await mermaid.render(`unmarkdown-diagram-${++diagramId}`, decodeURIComponent(diagram.dataset.source ?? ""))).svg;
           if (!cancelled) diagram.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
         } catch {
           if (!cancelled) {
@@ -448,8 +454,14 @@ export default function Home() {
             diagram.textContent = "Diagram could not be rendered. Check the Mermaid syntax.";
           }
         }
+      }));
+    })().catch(() => {
+      if (cancelled) return;
+      for (const diagram of diagrams) {
+        diagram.classList.add("diagram-error");
+        diagram.textContent = "Diagram renderer could not load. Refresh and try again.";
       }
-    })();
+    });
     return () => { cancelled = true; };
   }, [html, activeAccent, theme.ink]);
 

@@ -162,6 +162,8 @@ test("detects legal Markdown and exposes unrestricted styling", async () => {
   assert.match(page, /showFooter/);
   assert.match(page, /flowchart LR/);
   assert.match(page, /renderMermaidSvg/);
+  assert.match(page, /Promise\.all\(diagrams\.map/);
+  assert.match(page, /Diagram renderer could not load/);
   assert.match(page, /file\.size > 5 \* 1024 \* 1024/);
   assert.match(page, /onPaste=\{pasteMarkdown\}/);
   assert.match(page, /clipboardData\.getData\("text\/plain"\)/);
