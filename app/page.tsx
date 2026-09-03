@@ -179,9 +179,9 @@ type BrandLayout = "classic" | "letterhead" | "centered" | "executive" | "footer
 
 const brandLayouts: Record<BrandLayout, { label: string; description: string; placement: [boolean, boolean, boolean] }> = {
   classic: { label: "Classic cover", description: "Logo leads the cover", placement: [true, false, false] },
-  letterhead: { label: "Letterhead", description: "Logo at header left", placement: [false, true, false] },
-  centered: { label: "Centered", description: "Balanced masthead", placement: [false, true, false] },
-  executive: { label: "Executive", description: "Logo at header right", placement: [false, true, false] },
+  letterhead: { label: "Letterhead", description: "Left-aligned corporate cover", placement: [true, true, false] },
+  centered: { label: "Centered", description: "Balanced formal cover", placement: [true, true, false] },
+  executive: { label: "Executive", description: "Bold leadership layout", placement: [true, true, false] },
   footer: { label: "Footer mark", description: "Compact signature footer", placement: [false, false, true] },
 };
 const brandLayoutKeys = Object.keys(brandLayouts) as BrandLayout[];
@@ -752,6 +752,9 @@ export default function Home() {
       return new ImageRun({ data: logoData!, transformation: { width, height }, type: logo!.format });
     };
     const coverLogo = Boolean(logo && logoOnCover);
+    const coverAlignment = brandLayout === "classic" || brandLayout === "centered" ? AlignmentType.CENTER : AlignmentType.LEFT;
+    const coverLogoAlignment = brandLayout === "executive" ? AlignmentType.RIGHT : coverAlignment;
+    const coverDate = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
     const headerAlignment = brandLayout === "centered" ? AlignmentType.CENTER : brandLayout === "executive" ? AlignmentType.RIGHT : AlignmentType.LEFT;
     const footerAlignment = brandLayout === "centered" ? AlignmentType.CENTER : brandLayout === "classic" ? AlignmentType.RIGHT : AlignmentType.LEFT;
     const headerText = brandLayout === "classic" ? `${organization}  /  ${title}` : brandLayout === "footer" ? `${title}  /  ${classification}` : `${organization}  /  ${title}  /  ${classification} · V${version}`;
@@ -767,14 +770,14 @@ export default function Home() {
     ];
 
     if (coverPage) {
-      if (coverLogo) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 700, after: 200 }, children: [logoImage(76, 280)] }));
+      if (coverLogo) children.push(new Paragraph({ alignment: coverLogoAlignment, spacing: { before: 180, after: 260 }, children: [logoImage(92, 340)] }));
       children.push(
-        new Paragraph({ text: organization.toUpperCase(), alignment: AlignmentType.CENTER, spacing: { before: coverLogo ? 200 : 900, after: 700 }, style: "CoverEyebrow" }),
-        new Paragraph({ text: title, alignment: AlignmentType.CENTER, style: "CoverTitle", spacing: { after: 320 } }),
-        new Paragraph({ text: `${themes[themeKey].label} document`, alignment: AlignmentType.CENTER, style: "Subtitle", spacing: { after: 900 } }),
-        new Paragraph({ text: `Prepared by ${author}`, alignment: AlignmentType.CENTER, spacing: { after: 100 } }),
-        new Paragraph({ text: `Version ${version}  •  ${classification}`, alignment: AlignmentType.CENTER, spacing: { after: 100 } }),
-        new Paragraph({ text: new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }), alignment: AlignmentType.CENTER }),
+        new Paragraph({ text: organization.toUpperCase(), alignment: coverAlignment, spacing: { before: coverLogo ? 80 : 300, after: 120 }, style: "CoverEyebrow" }),
+        new Paragraph({ text: "", border: { bottom: { style: BorderStyle.SINGLE, size: 14, color: accent, space: 7 } }, spacing: { after: 820 } }),
+        new Paragraph({ text: title, alignment: coverAlignment, style: "CoverTitle", spacing: { after: 220 } }),
+        new Paragraph({ text: themes[themeKey].category.toUpperCase(), alignment: coverAlignment, style: "Subtitle", spacing: { after: 1040 } }),
+        new Paragraph({ children: [run("PREPARED BY  ", { bold: true, color: accent }), run(author, { bold: true })], alignment: coverAlignment, spacing: { after: 140 } }),
+        new Paragraph({ children: [run(`VERSION ${version}   ·   ${classification.toUpperCase()}   ·   ${coverDate}`, { color: "747A80" })], alignment: coverAlignment, spacing: { after: 100 } }),
         new Paragraph({ children: [new PageBreak()] }),
       );
     }
@@ -836,7 +839,7 @@ export default function Home() {
         default: { document: { run: { font: theme.wordFont, size: 22, color: ink }, paragraph: { spacing: { line: 330 } } } },
         paragraphStyles: [
           { id: "CoverEyebrow", name: "Cover Eyebrow", basedOn: "Normal", run: { font: theme.wordFont, size: 18, bold: true, color: accent, characterSpacing: 80 } },
-          { id: "CoverTitle", name: "Cover Title", basedOn: "Title", run: { font: theme.wordFont, size: 48, bold: true, color: ink } },
+          { id: "CoverTitle", name: "Cover Title", basedOn: "Title", run: { font: theme.wordFont, size: 64, bold: true, color: ink } },
           { id: "Title", name: "Title", basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: theme.wordFont, size: 40, bold: true, color: ink }, paragraph: { spacing: { before: 120, after: 260 }, outlineLevel: 0 } },
           { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: theme.wordFont, size: 30, bold: true, color: accent }, paragraph: { spacing: { before: 360, after: 160 }, outlineLevel: 0, keepNext: true } },
           { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true, run: { font: theme.wordFont, size: 25, bold: true, color: ink }, paragraph: { spacing: { before: 280, after: 120 }, outlineLevel: 1, keepNext: true } },
@@ -849,9 +852,15 @@ export default function Home() {
         ],
       },
       sections: [{
-        properties: { page: { size: page, margin: { top: margins, right: margins, bottom: margins, left: margins } } },
-        headers: showHeader ? { default: new Header({ children: [new Paragraph({ alignment: headerAlignment, children: headerContent, border: { bottom: { style: BorderStyle.SINGLE, size: 3, color: "D8DCE0", space: 6 } } })] }) } : undefined,
-        footers: showFooter ? { default: new Footer({ children: [new Paragraph({ alignment: footerAlignment, children: footerContent })] }) } : undefined,
+        properties: { titlePage: coverPage, page: { size: page, margin: { top: margins, right: margins, bottom: margins, left: margins } } },
+        headers: showHeader ? {
+          ...(coverPage ? { first: new Header({ children: [new Paragraph("")] }) } : {}),
+          default: new Header({ children: [new Paragraph({ alignment: headerAlignment, children: headerContent, border: { bottom: { style: BorderStyle.SINGLE, size: 5, color: accent, space: 7 } } })] }),
+        } : undefined,
+        footers: showFooter ? {
+          ...(coverPage ? { first: new Footer({ children: [new Paragraph("")] }) } : {}),
+          default: new Footer({ children: [new Paragraph({ alignment: footerAlignment, children: footerContent })] }),
+        } : undefined,
         children,
       }],
     });
@@ -890,6 +899,13 @@ export default function Home() {
     window.setTimeout(() => previewTriggerRef.current?.focus(), 0);
   };
 
+  const coverDateLabel = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+  const runningHeader = showHeader ? <div className="paper-header">
+    <span className="header-brand">{logo && logoInHeader && <img src={logo.src} alt="" />}<b>{organization}</b></span>
+    <span className="header-document">{title}</span>
+    <span className="header-meta">{classification} · V{version}</span>
+  </div> : null;
+
   const formatPanel = <aside className="inspector-pane format-pane">
     <div className="pane-label"><span>DOCUMENT FORMAT</span><button onClick={() => setPanel(null)}>×</button></div>
     <div className="inspector-scroll">
@@ -924,20 +940,20 @@ export default function Home() {
         <label>Organization<input value={organization} onChange={(e) => setOrganization(e.target.value)} /></label>
         <label>Brand colour<div className="brand-color"><input aria-label="Brand colour" type="color" value={activeAccent} onChange={(e) => setAccentOverride(e.target.value)} /><button onClick={() => setAccentOverride("")}>Use theme colour</button></div></label>
         <label>Company logo</label>
-        {logo ? <>
-          <div className="logo-row"><img src={logo.src} alt="Logo preview" /><span><b>Logo ready</b><small>{logo.width} × {logo.height}px</small></span><button onClick={() => logoRef.current?.click()}>Replace</button><button className="logo-remove" aria-label="Remove logo" title="Remove logo" onClick={() => setLogo(null)}>×</button></div>
-          <div className="logo-customization">
-            <label>Brand layout</label>
-            <div className="brand-layout-grid" role="radiogroup" aria-label="Brand layout">
-              {brandLayoutKeys.map((key) => <button key={key} role="radio" aria-checked={brandLayout === key} className={brandLayout === key ? "selected" : ""} onClick={() => applyBrandLayout(key)}>
-                <span className={`brand-layout-preview layout-${key}`} aria-hidden="true"><i className="mini-logo"/><i className="mini-name"/><i className="mini-detail"/><i className="mini-number"/></span>
-                <span><b>{brandLayouts[key].label}</b><small>{brandLayouts[key].description}</small></span>
-              </button>)}
-            </div>
+        {logo ? <div className="logo-row"><img src={logo.src} alt="Logo preview" /><span><b>Logo ready</b><small>{logo.width} × {logo.height}px</small></span><button onClick={() => logoRef.current?.click()}>Replace</button><button className="logo-remove" aria-label="Remove logo" title="Remove logo" onClick={() => setLogo(null)}>×</button></div> : <button className="logo-upload" onClick={() => logoRef.current?.click()}><b>Upload company logo</b><small>PNG, JPG, GIF or BMP · under 2 MB</small></button>}
+        <div className="logo-customization">
+          <label>Cover &amp; letterhead style</label>
+          <div className="brand-layout-grid" role="radiogroup" aria-label="Cover and letterhead style">
+            {brandLayoutKeys.map((key) => <button key={key} role="radio" aria-checked={brandLayout === key} className={brandLayout === key ? "selected" : ""} onClick={() => applyBrandLayout(key)}>
+              <span className={`brand-layout-preview layout-${key}`} aria-hidden="true"><i className="mini-logo"/><i className="mini-name"/><i className="mini-detail"/><i className="mini-number"/></span>
+              <span><b>{brandLayouts[key].label}</b><small>{brandLayouts[key].description}</small></span>
+            </button>)}
+          </div>
+          {logo && <>
             <label>Show logo in</label><div className="logo-placement">{[["Cover", logoOnCover, setLogoOnCover], ["Header", logoInHeader, setLogoInHeader], ["Footer", logoInFooter, setLogoInFooter]].map(([label, value, setter]) => <button key={String(label)} className={value ? "selected" : ""} aria-pressed={value as boolean} onClick={() => (setter as (value: boolean) => void)(!value)}>{String(label)}</button>)}</div>
             <label className="logo-size-control"><span>Logo size <b>{logoScale}%</b></span><input aria-label="Logo size" type="range" min="50" max="220" step="5" value={logoScale} onChange={(e) => setLogoScale(Number(e.target.value))} /></label>
-          </div>
-        </> : <button className="logo-upload" onClick={() => logoRef.current?.click()}><b>Upload company logo</b><small>PNG, JPG, GIF or BMP · under 2 MB</small></button>}
+          </>}
+        </div>
         <label>Company details / footer<input value={footerText} placeholder={`${organization} · ${classification}`} onChange={(e) => setFooterText(e.target.value)} /></label>
         <div className="brand-actions"><button onClick={saveBrandKit}>Save company style</button><button onClick={forgetBrandKit}>Forget saved</button></div>
         <p className="brand-note">Saved only in this browser. Logos must be under 2 MB.</p>
@@ -1101,20 +1117,32 @@ export default function Home() {
               <div className="preview-scroll" ref={previewRef} tabIndex={0} aria-label="Scrollable document preview">
                 <div className="page-stage">
                   <div ref={paperRef} key={`${themeKey}-${pageSize}-${marginSize}`} className={`paper document-shell page-${pageSize} margin-${marginSize} brand-${brandLayout}`} style={{ "--accent": activeAccent, "--ink": theme.ink, "--paper": theme.paper, "--doc-font": theme.font, "--page-padding": padding, "--body-size": `${bodySize}px`, "--line-height": lineHeight, "--logo-scale": logoScaleFactor, zoom: zoom / 100 } as React.CSSProperties}>
-                    {showHeader && <div className="paper-header"><span className="header-brand">{logo && logoInHeader && <img src={logo.src} alt="" />}<b>{organization}</b></span><span className="header-document">{title}</span><span className="header-meta">{classification} · V{version}</span></div>}
+                    {!coverPage && runningHeader}
                     {coverPage && <section className="cover-preview">
                       <button className="cover-remove" title="Remove the cover page (re-enable in Document setup)" onClick={() => { setCoverPage(false); flash("Cover removed — re-enable it in Document setup."); }}>× Remove cover</button>
-                      {logo && logoOnCover && <div className="cover-logo"><img src={logo.src} alt={`${organization} logo`} /><button title="Remove logo from cover" onClick={() => setLogoOnCover(false)}>×</button></div>}
-                      {!logo && <button className="logo-add" onClick={() => logoRef.current?.click()}>+ Add company logo</button>}
-                      <small contentEditable={!docxPreviewOpen} suppressContentEditableWarning spellCheck={false} onBlur={(e) => setOrganization(e.currentTarget.textContent?.trim() || organization)}>{organization}</small>
-                      <h1 contentEditable={!docxPreviewOpen} suppressContentEditableWarning spellCheck={false} onBlur={(e) => setTitle(e.currentTarget.textContent?.trim() || title)}>{title}</h1>
-                      <p>{themes[themeKey].category}</p>
-                      <div>
-                        <span contentEditable={!docxPreviewOpen} suppressContentEditableWarning spellCheck={false} onBlur={(e) => setAuthor(e.currentTarget.textContent?.trim() || author)}>{author}</span>
-                        <span>Version <span contentEditable={!docxPreviewOpen} suppressContentEditableWarning spellCheck={false} onBlur={(e) => setVersion(e.currentTarget.textContent?.trim() || version)}>{version}</span></span>
+                      <div className="cover-accent" aria-hidden="true" />
+                      <div className="cover-top">
+                        <div className="cover-brand-lockup">
+                          {logo && logoOnCover && <div className="cover-logo"><img src={logo.src} alt={`${organization} logo`} /><button title="Remove logo from cover" onClick={() => setLogoOnCover(false)}>×</button></div>}
+                          {!logo && <button className="logo-add" onClick={() => logoRef.current?.click()}>+ Add company logo</button>}
+                          <div className="cover-organization"><small contentEditable={!docxPreviewOpen} suppressContentEditableWarning spellCheck={false} onBlur={(e) => setOrganization(e.currentTarget.textContent?.trim() || organization)}>{organization}</small>{footerText.trim() && <span>{footerText}</span>}</div>
+                        </div>
+                        <span className="cover-status">{classification} · V{version}</span>
+                      </div>
+                      <div className="cover-main">
+                        <span className="cover-kicker">{themes[themeKey].label} document</span>
+                        <h1 contentEditable={!docxPreviewOpen} suppressContentEditableWarning spellCheck={false} onBlur={(e) => setTitle(e.currentTarget.textContent?.trim() || title)}>{title}</h1>
+                        <p>{themes[themeKey].category}</p>
+                      </div>
+                      <div className="cover-meta">
+                        <div><small>Prepared by</small><b contentEditable={!docxPreviewOpen} suppressContentEditableWarning spellCheck={false} onBlur={(e) => setAuthor(e.currentTarget.textContent?.trim() || author)}>{author}</b></div>
+                        <div><small>Version</small><b contentEditable={!docxPreviewOpen} suppressContentEditableWarning spellCheck={false} onBlur={(e) => setVersion(e.currentTarget.textContent?.trim() || version)}>{version}</b></div>
+                        <div><small>Classification</small><b contentEditable={!docxPreviewOpen} suppressContentEditableWarning spellCheck={false} onBlur={(e) => setClassification(e.currentTarget.textContent?.trim() || classification)}>{classification}</b></div>
+                        <div><small>Date</small><b>{coverDateLabel}</b></div>
                       </div>
                       <em className="cover-hint">Click any line to edit</em>
                     </section>}
+                    {coverPage && runningHeader}
                     <article className={`document-preview theme-${themeKey} ${numberedHeadings ? "numbered-headings" : ""}`} dangerouslySetInnerHTML={{ __html: html }} />
                     {showFooter && <div className="paper-footer"><span className="footer-brand">{logo && logoInFooter && <img className="footer-logo" src={logo.src} alt="" />}<span>{resolvedFooterText}</span></span><span className="footer-document">{title}</span>{showPageNumbers && <span className="footer-page">01</span>}</div>}
                   </div>
